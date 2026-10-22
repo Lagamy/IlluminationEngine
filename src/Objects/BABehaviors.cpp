@@ -141,9 +141,8 @@ void BABehaviors::resolve(Physics::Collision& rCollision_, const BARemap& rRemap
 namespace
 {
 /* One remap of the file: names are looked up now, so a wrong name fails at startup and resolve only compares ids. */
-BARemap readRemap(const BABehaviors& rBehaviors_, const nlohmann::json& rFile_, const char* name_)
+BARemap readRemap(const BABehaviors& rBehaviors_, const nlohmann::json& rRemap, const std::string& name_)
 {
-	const nlohmann::json& rRemap = rFile_.at(name_);
 	auto behaviorNamed = [&](const std::string& rName_) -> PoolId
 	{
 		PoolId id = rBehaviors_.find(rName_.c_str());
@@ -200,10 +199,10 @@ void BABehaviors::loadRemaps(const std::string& path_)
 	try
 	{
 		file = nlohmann::json::parse(stream);
-		this->remapShadowLevel = readRemap(*this, file, "ShadowLevel");
-		this->remapSADXLevel = readRemap(*this, file, "SADXLevel");
-		this->remapSADXShape = readRemap(*this, file, "SADXShape");
-		this->remapShadowShape = readRemap(*this, file, "ShadowShape");
+		for(const auto& [rName, rSection] : file.items())
+		{
+			if(rSection.is_object()) this->remaps[rName] = readRemap(*this, rSection, rName);
+		}
 	}
 	catch(const nlohmann::json::exception& rError)
 	{
@@ -213,6 +212,13 @@ void BABehaviors::loadRemaps(const std::string& path_)
 	{
 		throw std::runtime_error(std::format("BABehaviors: {} is wrong: {}", path_, rError.what()));
 	}
+}
+
+BARemap& BABehaviors::remap(const std::string& section_)
+{
+	auto found = this->remaps.find(section_);
+	if(found == this->remaps.end()) throw std::runtime_error(std::format("BABehaviors: Remaps.json has no section {}.", section_));
+	return found->second;
 }
 
 PoolId BABehaviors::applyBoundArea(size_t index_)
@@ -319,9 +325,9 @@ void BABehaviors::removeBoundAreaTag(const std::string& rName_)
 		bool used = rBehavior.availableCollisions.contains(id.id) || rBehavior.availableInteractions.contains(id.id) || std::find(rBehavior.tags.begin(), rBehavior.tags.end(), id) != rBehavior.tags.end();
 		if(used) throw std::runtime_error(std::format("BABehaviors: the tag {} is used by the behaviour {}.", rName_, rBehaviors.names[b]));
 	}
-	for(const BARemap* pRemap : {&this->remapShadowLevel, &this->remapSADXLevel, &this->remapSADXShape, &this->remapShadowShape})
+	for(const auto& [rSection, rRemap] : this->remaps)
 	{
-		for(const auto& [raw, rTags] : pRemap->tags)
+		for(const auto& [raw, rTags] : rRemap.tags)
 		{
 			if(std::find(rTags.begin(), rTags.end(), id) != rTags.end()) throw std::runtime_error(std::format("BABehaviors: the tag {} is given to the value 0x{:X} by Remaps.json.", rName_, raw));
 		}
@@ -486,15 +492,6 @@ void BABehaviors::saveBoundAreas() const
 		if(!out) throw std::runtime_error(std::format("BABehaviors: can't write {}.", rPath.string()));
 		out << text;
 	}
-}
-
-BARemap& BABehaviors::remapOfSection(const std::string& section_)
-{
-	if(section_ == "ShadowLevel") return this->remapShadowLevel;
-	if(section_ == "SADXLevel") return this->remapSADXLevel;
-	if(section_ == "SADXShape") return this->remapSADXShape;
-	if(section_ == "ShadowShape") return this->remapShadowShape;
-	throw std::runtime_error(std::format("BABehaviors: no remap section {}.", section_));
 }
 
 void BABehaviors::setRemapValue(const char* section_, BARemap& rRemap_, uint32_t raw_, PoolId behavior_, const std::vector<PoolId>& tags_)

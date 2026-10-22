@@ -479,7 +479,7 @@ void writeGLTF(const std::string& rPath_, const GLTFScene& rScene_)
 		textures.push_back({{"source", i}, {"sampler", 0}});
 	}
 
-	Json root = {{"asset", {{"version", "2.0"}, {"generator", "SonicSunset"}}}, {"scene", 0}, {"scenes", {{{"nodes", rScene_.rootNodes}}}}};
+	Json root = {{"asset", {{"version", "2.0"}, {"generator", "IlluminationEngine"}}}, {"scene", 0}, {"scenes", {{{"nodes", rScene_.rootNodes}}}}};
 	root["nodes"] = nodes;
 	root["meshes"] = meshes;
 	if(!materials.empty()) root["materials"] = materials;

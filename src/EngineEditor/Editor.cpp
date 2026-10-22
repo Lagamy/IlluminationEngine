@@ -635,7 +635,7 @@ Editor::Clipboard Editor::snapshotOf(PoolId entityId_)
 	else if(rEntity.prefabId != UninitializedPoolId && (levelId != UninitializedPoolId || rEntity.hubWorldOwned))
 	{
 		PrefabKind kind = Globals::Game::prefabs[rEntity.prefabId].kind;
-		if(kind == PrefabKind::SonicPlayer || kind == PrefabKind::ShadowPlayer)
+		if(kind == PrefabKind::DantePlayer)
 		{
 			this->fileMessage = "Nothing copied: a player can't be copied.";
 			return copy;

@@ -22,6 +22,13 @@ constexpr GLint SkinnedLocation = 2;
 constexpr GLint UvOffsetLocation = 3;
 constexpr GLint EffectTintLocation = 4;
 
+/*
+Locations of the skinning uniforms of Shaders/DMC3/vertex.glsl: hasSkin (bool) and the array bones (mat4, MaxBones entries; a skeleton with more bones is not supported). Only the DMC3 draw sets them. Uniform locations are shared by the stages of a program, so they follow hasTexture (1); bones takes MaxBones locations from BonesLocation.
+*/
+constexpr GLint HasSkinLocation = 2;
+constexpr GLint BonesLocation = 3;
+constexpr size_t MaxBones = 64;
+
 struct Shader { 
 	GLuint id;
 	GLint modelLocation;

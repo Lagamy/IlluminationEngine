@@ -2,7 +2,7 @@
 #include "GPU_Globals.h"
 #include "RenderStats.h"
 #include "GPU_API.h"
-#include "ResourceLoader.h"
+#include "GameLoaders.h"
 #include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>

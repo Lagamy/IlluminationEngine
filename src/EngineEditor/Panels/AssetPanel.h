@@ -47,7 +47,7 @@ struct AssetPanel
 private:
 	/* The game indices of the External assets: Global (the project's) and Level (the open level's); GameCount counts them with the two games. */
 	static constexpr int Global = ScopeNav::Global;
-	static constexpr int Level = Global + 1;
+	static constexpr int LevelScope = Global + 1;
 	static constexpr int GameCount = Global + 2;
 
 	enum Kind

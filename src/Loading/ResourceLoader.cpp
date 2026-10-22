@@ -2,6 +2,7 @@
 #include "GPU_Globals.h"
 #include "Globals.h"
 #include "CollisionFile.h"
+#include "GameEntity.h"
 #include "ModelFile.h"
 #include "TextureFile.h"
 #include <glm/gtc/matrix_transform.hpp>
@@ -93,13 +94,13 @@ namespace Loading
         return gltfLevelInstances.add(std::move(level));
     }
 
-    /* The collision of a glTF level: the triangles of the collision files the key names (Collision/<name>.collision.json, CollisionFile.h) in one Collision, every piece solid (flags 0 is not listed in the SADXLevel remap, whose fallback is Solid). */
+    /* The collision of a glTF level: the triangles of the collision files the key names (Collision/<name>.collision.json, CollisionFile.h) in one Collision, every piece solid (flags 0 is not listed in the remap levelRemapSection(GLTF_FILE) names, whose fallback is Solid). */
     PoolId addGLTFCollision(const GLTFLevelKey& rLevel_)
     {
         Physics::Collision collision;
         for(const std::string& rName : rLevel_.collisions) collision.mesh.append(readGLTFCollisionFile(rLevel_, rName));
         collision.computeBounds();
-        Globals::Game::baBehaviors.resolve(collision, Globals::Game::baBehaviors.remapSADXLevel);
+        Globals::Game::baBehaviors.resolve(collision, Globals::Game::baBehaviors.remap(levelRemapSection(GLTF_FILE)));
         return Globals::Physics::collisions.add(std::move(collision));
     }
 
@@ -112,7 +113,7 @@ namespace Loading
         rCollision.position = glm::vec3(0.0f);
         rCollision.computeBounds();
         rCollision.setPosition(position);
-        Globals::Game::baBehaviors.resolve(rCollision, Globals::Game::baBehaviors.remapSADXLevel);
+        Globals::Game::baBehaviors.resolve(rCollision, Globals::Game::baBehaviors.remap(levelRemapSection(GLTF_FILE)));
     }
 
     /* One collision file of a glTF level. */

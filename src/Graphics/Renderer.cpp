@@ -4,6 +4,7 @@
 #include "Globals.h"
 #include "API.h"
 #include "Shader.h"
+#include "SAInstance.h"
 #include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
 #include <array>

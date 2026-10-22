@@ -472,7 +472,7 @@ void CollisionView::destroy()
 }
 
 /*
-A level's triangle values get their behaviour and their own tags from the remap of its game (Shadow stage: ShadowLevel; SADX and glTF levels: SADXLevel). The remap is changed and saved once per game, then each shown collision of that game
+A level's triangle values get their behaviour and their own tags from the remap its game names (levelRemapSection in GameEntity.h). The remap is changed and saved once per game, then each shown collision of that game
 takes the new behaviour for the value (so the collision system sees it at once, without reloading).
 */
 void CollisionView::setLevelValueBehavior(uint32_t value_, PoolId behavior_, const std::vector<PoolId>& tags_)
@@ -489,7 +489,7 @@ void CollisionView::setLevelValueBehavior(uint32_t value_, PoolId behavior_, con
 			std::string section = levelRemapSection(rLevel.sourceEngine);
 			if(std::find(doneSections.begin(), doneSections.end(), section) == doneSections.end())
 			{
-				rBehaviors.setRemapValue(section.c_str(), rBehaviors.remapOfSection(section), value_, behavior_, tags_);
+				rBehaviors.setRemapValue(section.c_str(), rBehaviors.remap(section), value_, behavior_, tags_);
 				doneSections.push_back(section);
 			}
 			Physics::Collision& rCollision = Globals::Physics::collisions[rLevel.collisionId];

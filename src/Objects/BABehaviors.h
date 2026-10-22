@@ -81,20 +81,21 @@ struct BABehaviors
 	PoolId body;
 	PoolId object;
 
-	BARemap remapShadowLevel;
-	BARemap remapSADXLevel;
-	BARemap remapSADXShape;
-	BARemap remapShadowShape;
+	/* The sections of External/Collision/Remaps.json by name (loadRemaps); which one a collision uses is the game's choice (levelRemapSection in GameEntity.h for a level, its loaders for object shapes). */
+	std::map<std::string, BARemap> remaps;
 
 	/* Adds the built-in tags and behaviours (and lists the behaviours in boundAreas.scriptBehaviors, so the editor can customise them); once, before any collision is loaded (resolve needs them). */
 	void init();
 
 	/*
-	Reads the four remaps from the file (Assets/External/Collision/Remaps.json: ShadowLevel, SADXLevel, SADXShape, ShadowShape, each {"fallback": behaviour name, "values": {"<raw, hex or decimal string>": behaviour name, or {"behavior": name, "tags": [tag name]} for a value with tags of its own}}; "note" is ignored).
+	Reads the remaps from the file (Assets/External/Collision/Remaps.json): every member of the top-level object that is an object is a section, named as the member is, {"fallback": behaviour name, "values": {"<raw, hex or decimal string>": behaviour name, or {"behavior": name, "tags": [tag name]} for a value with tags of its own}}; members that are not objects ("note") are ignored.
 	Once, after init, before any collision is loaded. Throws std::runtime_error if the file is missing or wrong, a behaviour
 	or tag name is unknown or a raw value is listed twice.
 	*/
 	void loadRemaps(const std::string& path_);
+
+	/* The remap of the Remaps.json section named section_; throws if there is no such section. */
+	BARemap& remap(const std::string& section_);
 
 	/* The editor-made tags and behaviours (BoundAreaData); empty if there is no file. */
 	BoundAreaData boundAreas;
@@ -140,13 +141,10 @@ struct BABehaviors
 	void saveBoundAreas() const;
 
 	/*
-	Gives the raw value raw_ the behaviour behavior_ and the tags tags_ (besides the behaviour's; empty = none, written as the plain name) in rRemap_ (one of the four remaps) and writes it into the "values" of the section named section_ ("ShadowLevel", "SADXLevel", ...) of Assets/External/Collision/Remaps.json
+	Gives the raw value raw_ the behaviour behavior_ and the tags tags_ (besides the behaviour's; empty = none, written as the plain name) in rRemap_ (one of remaps) and writes it into the "values" of the section named section_ of Assets/External/Collision/Remaps.json
 	and the source tree's copy, keeping the rest of the files (notes, fallback). Collisions already loaded keep their old behaviours: the caller changes Collision::behaviorByValue and tagsByValue. Throws if a file can't be read or written.
 	*/
 	void setRemapValue(const char* section_, BARemap& rRemap_, uint32_t raw_, PoolId behavior_, const std::vector<PoolId>& tags_);
-
-	/* The remap of the Remaps.json section named section_ ("ShadowLevel", "SADXLevel", "SADXShape" or "ShadowShape"); throws if there is no such section. */
-	BARemap& remapOfSection(const std::string& section_);
 #endif
 
 	/* Adds a tag or a behaviour under its key's name; throws if that name is taken in that pool. */

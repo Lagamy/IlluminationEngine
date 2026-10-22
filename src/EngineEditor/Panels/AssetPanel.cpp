@@ -1013,7 +1013,7 @@ void AssetPanel::draw(const std::string& filter_)
 	{
 		std::vector<std::string> labels;
 		bool inLevel = this->nav.inLevel();
-		for(int kind = 0; kind < (this->nav.openGame == Level ? Script : KindCount); kind++) labels.push_back(std::format("{} ({})", KindFolders[kind], inLevel ? this->levelCounts[this->nav.openGame][kind] : this->counts[this->nav.openGame][kind]));
+		for(int kind = 0; kind < (this->nav.openGame == LevelScope ? Script : KindCount); kind++) labels.push_back(std::format("{} ({})", KindFolders[kind], inLevel ? this->levelCounts[this->nav.openGame][kind] : this->counts[this->nav.openGame][kind]));
 		int clicked = this->drawFolders(labels);
 		if(clicked >= 0)
 		{

@@ -1,6 +1,6 @@
 # IluminationEngine
 
-The shared engine core of SonicFantasy (SonicSunset) and DevilMayCry Rebirth: renderer, entity/level/prefab system, physics and collision, Lua scripting, glTF import, the editor (ImGui) and the generic loaders. A game uses it as a git submodule and links the static library `IluminationEngine`.
+The shared engine core of SonicFantasy (SonicSunset) and DevilMayCry Rebirth: renderer, entity/level/prefab system, physics and collision, Lua scripting, glTF import, the editor (ImGui) and the generic loaders. A game links the static library `IluminationEngine` and reaches the folder through a symlink (below).
 
 The engine does not build alone. It reads the file formats of the games it supports (the **importers**, see below) but knows nothing about a game's own entities, levels and effects; instead it includes headers and calls functions that the game supplies **by fixed name**, found through the include path and the linker (no registration interfaces).
 
@@ -22,6 +22,7 @@ illumination_copy_directory(CopyScripts Game ${CMAKE_SOURCE_DIR}/Scripts Scripts
 - The game's folders go on `IluminationEngine`'s include path (PUBLIC), so the engine's files find the game's headers and the game's files find the engine's.
 - `EDITOR`, `ENGINE_DEBUG` and the platform defines are public: game and engine are compiled with the same struct layouts. With `EDITOR`, `SF_SOURCE_DIR` is the top-level source folder (the game's), where the editor saves levels.
 - `illumination_copy_directory`, `illumination_copy_file` and `illumination_copy_engine_assets` (CMakeLists.txt) make the copy-to-`Assets/` targets.
+- `External/Collision/Remaps.json` (the game's, copied to `Assets/`) holds the remaps from a collision's raw values to behaviours: every object member is a section (`{"fallback": behaviour, "values": {"0x...": behaviour}}`), read by name (`BABehaviors::remap`). The game decides which section a level or an object's shapes use (`levelRemapSection` in `GameEntity.h`, its loaders); the engine's glTF levels use `levelRemapSection(GLTF_FILE)`.
 - `Shaders/` holds the engine's shaders (`Default`, `GLTF`, and `SA`, `STH2005`, `DMC3` for the enabled format families); the game's own go next to them in `Assets/Shaders`.
 
 ## Format families (the importers)
@@ -54,4 +55,4 @@ Headers (found by name; every game has its own):
 
 Functions (declared in the headers above or in the engine's, defined by the game): the `Entity` and `Level` members that draw, update and destroy a game's instances; `registerPrefabs`, `buildGamePrefab`; `Loading::readGameRecipe`, `Loading::buildGameLevel`, `Loading::writeGameLevelFile`, `Loading::loadPrefabData`; `Graphics::initGameEffects`, `tickGameEffects`, `drawGameEffects`, `destroyGameGraphics`; `Scripting::registerGameAPI`; `PrefabThumbnails::renderModel`. The list is the linker's: build the game and every missing symbol is one to define.
 
-SonicFantasy's `src/Game/` is the model of all of this.
+Games that use it: [SonicFantasy](https://github.com/Lagamy/SonicFantasy) (`src/Game/` is the model of all of this) and DevilMayCry Rebirth. The GitHub repository is spelled `IlluminationEngine` (two l's); the folder and the CMake target keep one, and the games clone it into the folder name their symlink expects (`git clone git@github.com:Lagamy/IlluminationEngine.git IluminationEngine`).
