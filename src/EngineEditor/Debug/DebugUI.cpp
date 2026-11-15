@@ -306,8 +306,10 @@ void DebugUI::draw(Editor& rEditor_)
 	if(rEditor_.active) rEditor_.text.draw(rEditor_.camera);
 	if(rEditor_.active)
 	{
-		if(!rEditor_.hubWorldView) rEditor_.gizmo.draw(rEditor_.camera, rEditor_.entityList.selection());
-		else
+		if(rEditor_.hubWorldGeometry || rEditor_.hubWorldTexturing) rEditor_.geometry.drawOverlay(rEditor_.camera, rEditor_.gizmo);
+		if(rEditor_.hubWorldCollision) rEditor_.collisionPanel.drawOverlay(rEditor_.camera, rEditor_.gizmo);
+		if(rEditor_.hubWorldTexturing) rEditor_.texturing.drawPanel(rEditor_.geometry);
+		else if(rEditor_.hubWorldView)
 		{
 			std::vector<glm::vec3> positions;
 			for(const std::string& rName : rEditor_.hubWorldSelection())
@@ -317,6 +319,7 @@ void DebugUI::draw(Editor& rEditor_)
 			}
 			rEditor_.gizmo.drawLevels(rEditor_.camera, positions);
 		}
+		else if(!rEditor_.hubWorldCollision) rEditor_.gizmo.draw(rEditor_.camera, rEditor_.entityList.selection());
 	}
 
 	/* A crosshair at the center of the window, where the view ray of the P key (Editor::processInputs) goes through. */

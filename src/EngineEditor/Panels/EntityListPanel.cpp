@@ -63,34 +63,19 @@ void EntityListPanel::draw()
 	/* Which view is in use is set again every frame by the tab item that is drawn: Level (neither), HubWorld > Levels (hubWorldView) or HubWorld > Entities (hubWorldEntities). */
 	editor.hubWorldView = false;
 	editor.hubWorldEntities = false;
+	editor.hubWorldGeometry = false;
+	editor.hubWorldTexturing = false;
+	editor.hubWorldCollision = false;
 	ImGuiTabItemFlags levelFlags = this->focusLevelTab ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
 	this->focusLevelTab = false;
 	if(ImGui::BeginTabBar("ViewTabs"))
 	{
 		if(ImGui::BeginTabItem("Level", nullptr, levelFlags))
 		{
-			if(ImGui::BeginTabBar("LeftTabs"))
-			{
-				if(ImGui::BeginTabItem("Entities"))
-				{
-					this->drawEntities();
-					ImGui::EndTabItem();
-				}
-				if(ImGui::BeginTabItem("Collision"))
-				{
-					editor.collisionView.drawPanel();
-					ImGui::EndTabItem();
-				}
-				if(ImGui::BeginTabItem("Editor camera"))
-				{
-					this->drawCameraSettings();
-					ImGui::EndTabItem();
-				}
-				ImGui::EndTabBar();
-			}
+			this->drawEntities();
 			ImGui::EndTabItem();
 		}
-		/* The HubWorld tab exists only while the levels are loaded as a HubWorld; without it the Level view is the one in use. */
+		/* The HubWorld tab exists only while the levels are loaded as a HubWorld (File > Load HubWorld, which also loads an empty HubWorld.json); without it the Level view is the one in use. */
 		if(Globals::Game::hubWorld.loadedAsHub && ImGui::BeginTabItem("HubWorld"))
 		{
 			if(ImGui::BeginTabBar("HubWorldTabs"))
@@ -105,6 +90,42 @@ void EntityListPanel::draw()
 				{
 					editor.hubWorldEntities = true;
 					this->drawEntities();
+					ImGui::EndTabItem();
+				}
+				if(ImGui::BeginTabItem("Geometry"))
+				{
+					editor.hubWorldGeometry = true;
+					editor.geometry.drawTab();
+					ImGui::EndTabItem();
+				}
+				if(ImGui::BeginTabItem("Texturing"))
+				{
+					editor.hubWorldTexturing = true;
+					editor.texturing.drawTab(editor.geometry);
+					ImGui::EndTabItem();
+				}
+				if(ImGui::BeginTabItem("Collision"))
+				{
+					editor.hubWorldCollision = true;
+					editor.collisionPanel.drawTab();
+					ImGui::EndTabItem();
+				}
+				ImGui::EndTabBar();
+			}
+			ImGui::EndTabItem();
+		}
+		if(ImGui::BeginTabItem("Settings"))
+		{
+			if(ImGui::BeginTabBar("SettingsTabs"))
+			{
+				if(ImGui::BeginTabItem("Collision"))
+				{
+					editor.collisionView.drawPanel();
+					ImGui::EndTabItem();
+				}
+				if(ImGui::BeginTabItem("Editor camera"))
+				{
+					this->drawCameraSettings();
 					ImGui::EndTabItem();
 				}
 				ImGui::EndTabBar();

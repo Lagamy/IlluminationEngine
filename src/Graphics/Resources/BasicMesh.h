@@ -115,6 +115,17 @@ private:
 	}
 };
 
+/*
+A run of a mesh's indices drawn with a texture of its own (the editor's Texturing subtab gives faces a texture; EditMesh / setMeshTriangles order the indices so that the faces of one texture are together). The indices before the first group are drawn as the owner of the mesh draws them (its submesh's texture, if any);
+each group then binds its texture to unit 0 with hasTexture set and draws its run, so a group costs one more draw call and no change in the owners' draw code.
+*/
+struct IndexGroup
+{
+	uint32_t firstIndex = 0;
+	uint32_t indexCount = 0;
+	GLuint texture = 0;
+};
+
 struct BasicMesh
 {
 	GLuint VAO;
@@ -134,6 +145,9 @@ struct BasicMesh
 	std::vector<uint32_t> sourceVertex;
 	uint32_t sourceMesh = 0;
 	bool alive = false; 
+
+	/* Empty for every mesh the editor didn't give a face texture. Sorted by firstIndex, running to the end of indicies. */
+	std::vector<IndexGroup> groups;
 	
 	void create(); 
 	void draw(); // Using current shader
@@ -143,4 +157,7 @@ struct BasicMesh
 	// void addVertexBatch(void* data_, uint64_t vertexAmount_); 
 	// void addIndexBatch(void* data_, uint64_t indexAmount_); 
 };
+
+/* The one mesh the editor draws while its Geometry or Texturing subtab isolates the object being edited (GeometryPanel::isolate); nullptr = every mesh is drawn. Only compared with, never used. Renderer::run sets it each frame. */
+inline const BasicMesh* isolatedMesh = nullptr;
 }

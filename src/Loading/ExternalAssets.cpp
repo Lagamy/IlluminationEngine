@@ -251,6 +251,23 @@ void importExternalModel(External::ModelData model_, ExternalScope scope_)
 	revision++;
 }
 
+const Graphics::ExternalModel& addExternalModel(Graphics::ExternalPools& rPools_, bool inProject_, External::ModelData model_)
+{
+	registerModel(rPools_, inProject_, model_);
+	revision++;
+	return rPools_.models[rPools_.models.nameToId.at(model_.name)];
+}
+
+External::ModelData readExternalModelFile(const Graphics::ExternalModel& rModel_)
+{
+	return External::readModel((folderOf(rModel_.inProject ? ExternalScope::Project : ExternalScope::Level) / "Models" / (rModel_.name + ".model.json")).string());
+}
+
+Graphics::ExternalPools& externalPoolsOf(ExternalScope scope_)
+{
+	return poolsOf(scope_);
+}
+
 uint32_t externalRevision()
 {
 	return revision;

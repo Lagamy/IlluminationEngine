@@ -5,7 +5,9 @@
 #include <algorithm>
 #include <cstdio>
 #include <format>
+#include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <stdexcept>
 
 namespace
@@ -27,6 +29,34 @@ void HubWorld::read()
 {
 	this->levels.clear();
 	this->entities.clear();
+	this->meshEdits.clear();
+	this->collisionEdits.clear();
+	std::ifstream collisionBinary(Paths::HubWorldCollisionBin, std::ios::binary);
+	if(collisionBinary)
+	{
+		try
+		{
+			this->collisionEdits = readCollisionDiffs(std::vector<uint8_t>(std::istreambuf_iterator<char>(collisionBinary), std::istreambuf_iterator<char>()));
+		}
+		catch(const std::exception& rError)
+		{
+			fprintf(stderr, "Assets/HubWorld.collision.bin not read, no collision edits: %s\n", rError.what());
+			this->collisionEdits.clear();
+		}
+	}
+	std::ifstream binary(Paths::HubWorldBin, std::ios::binary);
+	if(binary)
+	{
+		try
+		{
+			this->meshEdits = readMeshDiffs(std::vector<uint8_t>(std::istreambuf_iterator<char>(binary), std::istreambuf_iterator<char>()));
+		}
+		catch(const std::exception& rError)
+		{
+			fprintf(stderr, "Assets/HubWorld.bin not read, no geometry edits: %s\n", rError.what());
+			this->meshEdits.clear();
+		}
+	}
 	std::ifstream stream(Paths::HubWorld);
 	if(!stream) return;
 	try
@@ -110,6 +140,40 @@ void HubWorld::write() const
 		std::ofstream out(rPath);
 		if(!out) throw std::runtime_error(std::format("can't write {}.", rPath));
 		out << text;
+	}
+}
+
+void HubWorld::writeMeshEdits() const
+{
+	std::vector<uint8_t> bytes = writeMeshDiffs(this->meshEdits);
+	for(const std::string& rPath : {std::string(Paths::HubWorldBin), std::string(Paths::SourceHubWorldBin)})
+	{
+		if(this->meshEdits.empty())
+		{
+			std::error_code ignored;
+			std::filesystem::remove(rPath, ignored);
+			continue;
+		}
+		std::ofstream out(rPath, std::ios::binary);
+		if(!out) throw std::runtime_error(std::format("can't write {}.", rPath));
+		out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+	}
+}
+
+void HubWorld::writeCollisionEdits() const
+{
+	std::vector<uint8_t> bytes = writeCollisionDiffs(this->collisionEdits);
+	for(const std::string& rPath : {std::string(Paths::HubWorldCollisionBin), std::string(Paths::SourceHubWorldCollisionBin)})
+	{
+		if(this->collisionEdits.empty())
+		{
+			std::error_code ignored;
+			std::filesystem::remove(rPath, ignored);
+			continue;
+		}
+		std::ofstream out(rPath, std::ios::binary);
+		if(!out) throw std::runtime_error(std::format("can't write {}.", rPath));
+		out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
 	}
 }
 #endif

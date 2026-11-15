@@ -32,6 +32,26 @@ struct EditorCamera : Camera
 	/* True from a button press until its release; panning tells which one: middle = pan, right = turn. */
 	bool dragging = false;
 	bool panning = false;
+	/* The right button box-selects (the Geometry, Texturing and Collision subtabs; Editor::processInputs sets it each frame): it starts the look hold only with Alt held. A look already started goes on until the button is let go. */
+	bool rightSelects = false;
+	/* True after alignTo (keys 1-6 in the Geometry, Texturing and Collision subtabs) until a look hold turns the camera; while it is true a left drag pans the camera in the view plane (GeometryPanel::update). */
+	bool aligned = false;
+	/* The middle button turns the camera around orbitCenter instead of panning it (Editor::processInputs sets both while the Geometry or Texturing subtab is shown, orbitCenter = the middle of the open mesh); read when the hold starts. orbiting is true during such a hold. */
+	bool middleOrbits = false;
+	glm::vec3 orbitCenter = glm::vec3(0.0f);
+	bool orbiting = false;
+
+	/* Looks along direction_ (a unit vector) and, with a target_, moves along that line so that the target_ stays at the same distance (at least 1) in the middle of the view. Sets aligned and the orthographic projection (Camera::orthographic, as tall as the perspective view is at the target; the wheel zooms it). */
+	void alignTo(const glm::vec3& rDirection_, const glm::vec3* pTarget_);
+
+	/* Turns the camera by a mouse movement in pixels (as the look does) about orbitCenter, keeping its distance to it; also ends the aligned view. */
+	void orbit(float xOffset_, float yOffset_);
+
+	/* Ends the aligned view: the perspective projection again. */
+	void leaveAligned();
+
+	/* Moves the camera along its own right and up axes by pixels (the middle button pan; y is positive downwards). */
+	void panPixels(float xOffset_, float yOffset_);
 
 	/* The fly keys, scaled by the frame time. */
 	void processKeys(GLFWwindow* pWindow_, float deltaTime_);

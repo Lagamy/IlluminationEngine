@@ -86,6 +86,8 @@ struct CollisionView
 
 	/* The same along entityAttributes, through "none" (nothing highlighted) as well. */
 	void selectEntityAttribute(int step_);
+	/* The level lines are made again at the next draw (a level's collision was changed in place). */
+	void levelLinesStale() { this->shownLevelCollisions.clear(); }
 	void destroy();
 
 	/* The reason the last behaviour change in the Level sub tab failed (shown in red there), empty if it did not. */

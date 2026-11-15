@@ -64,6 +64,9 @@ void Renderer::init()
 void Renderer::run(Camera& rCamera_, bool clearColor_) 
 { 
 	glClear(clearColor_ ? (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT) : GL_DEPTH_BUFFER_BIT);
+#ifdef EDITOR
+	isolatedMesh = editor.active ? editor.geometry.isolatedMesh() : nullptr;
+#endif
 
 	// bind cameras UBO to binding = 0 (matches shader); must happen before drawing
 	glBindBufferBase(GL_UNIFORM_BUFFER, 0, rCamera_.UBOId);

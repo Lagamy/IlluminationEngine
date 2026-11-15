@@ -7,6 +7,7 @@
 #include "Level.h"
 #include "API.h"
 #include "Scripting.h"
+#include "MeshDiff.h"
 #include "EntityBehavior.h"
 #include "imgui.h"
 #include <stb_image.h>
@@ -109,6 +110,13 @@ std::string fitText(const std::string& text_, float width_)
 		second += "..";
 	}
 	return first + "\n" + second;
+}
+
+/* The name a disc texture tile's set goes by in a "TEXTURE" payload and in discTextureTiles: a SADX .GVM's path, a Shadow .TXD's entry name (the part after " > " of the source). */
+std::string discSetOf(int game_, const std::string& rSource_)
+{
+	size_t arrow = rSource_.find(" > ");
+	return game_ == 1 && arrow != std::string::npos ? rSource_.substr(arrow + 3) : rSource_;
 }
 
 /* The contents of a drag's floating preview: the tile's picture (when it has one; flipped like the tile's) over the name. */
@@ -331,6 +339,8 @@ void AssetPanel::reloadScripts()
 	this->searchStale = true;
 	this->levelSeen = ~0ull;
 	this->selectedGame = -1;
+	this->textureSet.clear();
+	this->setTiles.clear();
 }
 
 /* A name that becomes a file or folder name: no path separators, not "." / "..". */
@@ -564,6 +574,37 @@ void AssetPanel::drawScriptDialogs()
 	}
 }
 
+/*
+The textures of the open disc set, one tile each (they are decoded already, see discTextureTiles). A tile drags as "TEXTURETILE": the set, '#', the texture's name (with the '\0'), which the Texturing subtab gives straight to the picked faces
+(the face texture name "disc:<set>#<name>", see findFaceTexture).
+*/
+void AssetPanel::drawTextureSet()
+{
+	if(this->setTiles.empty()) ImGui::TextDisabled("No textures could be read from it.");
+	const ImGuiStyle& rStyle = ImGui::GetStyle();
+	float cell = TileSize + 2.0f * rStyle.FramePadding.x;
+	int columns = std::max(1, static_cast<int>((ImGui::GetContentRegionAvail().x + rStyle.ItemSpacing.x) / (cell + rStyle.ItemSpacing.x)));
+	for(int i = 0; i < static_cast<int>(this->setTiles.size()); i++)
+	{
+		const DiscTextureTile& rTile = this->setTiles[i];
+		if(i % columns != 0) ImGui::SameLine();
+		ImGui::PushID(i);
+		ImGui::BeginGroup();
+		ImGui::ImageButton("##tile", static_cast<ImTextureID>(rTile.pTexture->textureId), ImVec2(TileSize, TileSize));
+		if(ImGui::BeginDragDropSource())
+		{
+			std::string payload = this->textureSet + "#" + rTile.name;
+			ImGui::SetDragDropPayload("TEXTURETILE", payload.c_str(), payload.size() + 1);
+			dragPreview(rTile.pTexture->textureId, false, rTile.name);
+			ImGui::EndDragDropSource();
+		}
+		else if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s", rTile.name.c_str());
+		ImGui::TextUnformatted(fitText(rTile.name, cell).c_str());
+		ImGui::EndGroup();
+		ImGui::PopID();
+	}
+}
+
 /* The tiles of one list as a grid of rows; only the rows on screen are drawn (the lists have thousands of tiles). Each tile: a flat picture of the kind's colour with its short label, the name under it, a tooltip with the source. */
 void AssetPanel::drawTiles(int game_, int kind_, int group_, const std::vector<int>* pOnly_)
 {
@@ -648,6 +689,12 @@ void AssetPanel::drawTiles(int game_, int kind_, int group_, const std::vector<i
 						this->scriptFolder = rList[i].folder;
 					}
 				}
+				/* A double click on a disc texture tile (a whole set) opens the set, to drag its textures one by one (drawTextureSet). */
+				if(kind_ == Texture && game_ < Global && !this->searching && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+				{
+					this->textureSet = discSetOf(game_, rList[i].source);
+					this->setTiles = discTextureTiles ? discTextureTiles(this->textureSet) : std::vector<DiscTextureTile>();
+				}
 				/* A script tile's menu: open it with the chosen application, or ask to delete it (the dialog is drawn by drawScriptDialogs). */
 				if(kind_ == Script && ImGui::BeginPopupContextItem("##scriptMenu"))
 				{
@@ -670,13 +717,7 @@ void AssetPanel::drawTiles(int game_, int kind_, int group_, const std::vector<i
 				/* A texture tile can be dropped on the inspector's Texture tab: "external" or "disc", a tab, then the name (an external texture's; a SADX .GVM's path; a Shadow .TXD's entry name, the part after " > " of the source), with the '\0'. */
 				else if(kind_ == Texture && ImGui::BeginDragDropSource())
 				{
-					std::string payload;
-					if(game_ >= Global) payload = "external\t" + rList[i].name;
-					else
-					{
-						size_t arrow = rList[i].source.find(" > ");
-						payload = "disc\t" + (game_ == 1 && arrow != std::string::npos ? rList[i].source.substr(arrow + 3) : rList[i].source);
-					}
+					std::string payload = game_ >= Global ? "external\t" + rList[i].name : "disc\t" + discSetOf(game_, rList[i].source);
 					ImGui::SetDragDropPayload("TEXTURE", payload.c_str(), payload.size() + 1);
 					dragPreview(texture, false, rList[i].name);
 					ImGui::EndDragDropSource();
@@ -883,6 +924,7 @@ void AssetPanel::drawPath(const std::vector<std::string>& names_, const std::vec
 		{
 			int level = levels_[i];
 			this->scriptFile.clear();
+			this->textureSet.clear();
 			this->nav.goBack(level);
 			if(level <= 2) this->openKind = -1;
 			if(level <= 3) this->openGroup = -1;
@@ -998,6 +1040,11 @@ void AssetPanel::draw(const std::string& filter_)
 			levels.push_back(4 + depth);
 		}
 	}
+	if(this->openKind == Texture && !this->textureSet.empty())
+	{
+		names.push_back(this->textureSet);
+		levels.push_back(5);
+	}
 	this->drawPath(names, levels);
 
 	ImGui::BeginChild("AssetTiles", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Borders);
@@ -1020,6 +1067,10 @@ void AssetPanel::draw(const std::string& filter_)
 			this->openKind = clicked;
 			if(this->nav.openGame >= Global) this->openGroup = 0;
 		}
+	}
+	else if(this->openKind == Texture && !this->textureSet.empty())
+	{
+		this->drawTextureSet();
 	}
 	else if(this->openKind == Script && !this->scriptFile.empty())
 	{

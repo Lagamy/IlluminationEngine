@@ -2,6 +2,7 @@
 #include "Paths.h"
 #include "LevelRecipe.h"
 #include "GameLevelLoader.h"
+#include "GameEntity.h"
 #include "Level.h"
 #include "API.h"
 #include "Globals.h"
@@ -812,6 +813,70 @@ void applyEdits(Level& rLevel_, const std::string& name_, PoolId shaderId_)
 
 namespace
 {
+/* The level's geometry edits of HubWorld.bin (HubWorld::meshEdits) applied to its freshly imported meshes. A diff that doesn't fit its mesh is on stderr and skipped. The editor keeps the imported mesh of each (HubWorld::meshOriginals). */
+static void applyHubWorldMeshEdits(Level& rLevel_, const std::string& rName_)
+{
+	HubWorld& rHubWorld = Globals::Game::hubWorld;
+	const LevelMeshDiffs* pEdits = nullptr;
+	for(const LevelMeshDiffs& rLevel : rHubWorld.meshEdits)
+	{
+		if(rLevel.level == rName_) pEdits = &rLevel;
+	}
+	if(pEdits == nullptr) return;
+	std::vector<std::pair<Graphics::BasicMesh*, glm::mat4>> meshes;
+	rLevel_.editableMeshes(meshes);
+	for(const MeshDiff& rDiff : pEdits->meshes)
+	{
+		MeshOriginal original;
+		bool applied = false;
+		try
+		{
+			applied = rDiff.ordinal < meshes.size() && applyMeshDiff(*meshes[rDiff.ordinal].first, rDiff, original);
+		}
+		catch(const std::exception& rError)
+		{
+			fprintf(stderr, "HubWorld.bin: level '%s' mesh %u: %s\n", rName_.c_str(), rDiff.ordinal, rError.what());
+			continue;
+		}
+		if(!applied)
+		{
+			fprintf(stderr, "HubWorld.bin: level '%s' mesh %u doesn't match the imported mesh, its edits are skipped\n", rName_.c_str(), rDiff.ordinal);
+			continue;
+		}
+#ifdef EDITOR
+		rHubWorld.meshOriginals[{rName_, rDiff.ordinal}] = std::move(original);
+#endif
+	}
+}
+
+/* The level's collision edit of HubWorld.collision.bin (HubWorld::collisionEdits) applied to its freshly built collision, its bounds made again, the quad tree built again and the values the edit gives triangles resolved to behaviours. A diff that doesn't fit is on stderr and skipped. The editor keeps the imported collision (HubWorld::collisionOriginals). */
+static void applyHubWorldCollisionEdits(Level& rLevel_, const std::string& rName_)
+{
+	HubWorld& rHubWorld = Globals::Game::hubWorld;
+	const CollisionDiff* pEdit = nullptr;
+	for(const LevelCollisionDiff& rLevel : rHubWorld.collisionEdits)
+	{
+		if(rLevel.level == rName_) pEdit = &rLevel.diff;
+	}
+	if(pEdit == nullptr || rLevel_.collisionId == UninitializedPoolId) return;
+	Physics::Collision& rCollision = Globals::Physics::collisions[rLevel_.collisionId];
+	rCollision.setRotation(glm::mat3(1.0f));
+#ifdef EDITOR
+	Physics::CollisionMesh original = rCollision.mesh;
+#endif
+	if(!applyCollisionDiff(rCollision.mesh, *pEdit))
+	{
+		fprintf(stderr, "HubWorld.collision.bin: level '%s' doesn't match the imported collision, its edits are skipped\n", rName_.c_str());
+		return;
+	}
+	rCollision.computeBounds();
+	Globals::Game::baBehaviors.resolve(rCollision, Globals::Game::baBehaviors.remap(levelRemapSection(rLevel_.sourceEngine)));
+	Globals::Physics::collisionSystem.rebuildQuadTree();
+#ifdef EDITOR
+	rHubWorld.collisionOriginals[rName_] = std::move(original);
+#endif
+}
+
 /*
 Fills a level that addLevel made (or that resetLevel emptied): its name, External prefabs, the instance, collision and placed entities from the recipe, the file's edits, and last its place in the HubWorld. Throws what the steps throw; the caller decides what a failed level becomes.
 With keepInstance_ the level still has its instance, collision and External assets (resetLevel destroyed only its entities): those steps are skipped and the place in the HubWorld is applied from the unmoved state the new entities are in. Not for a level that has none yet.
@@ -835,6 +900,8 @@ void buildLevel(PoolId id_, const std::string& name_, Recipe& rRecipe_, bool kee
 		}
 	}
 	else buildGameLevel(rLevel, rRecipe_, keepInstance_);
+	if(!keepInstance_ && Globals::Game::hubWorld.loadedAsHub) applyHubWorldMeshEdits(rLevel, name_);
+	if(!keepInstance_ && Globals::Game::hubWorld.loadedAsHub) applyHubWorldCollisionEdits(rLevel, name_);
 	applyEdits(rLevel, name_, rRecipe_.shaderId);
 
 	/* The level was made and edited in its own coordinates; the HubWorld's place for it (HubWorld.json) moves all of it, so its file's edits stay local (saveLevelEdits writes them back unmoved). */
@@ -1059,6 +1126,7 @@ PoolId loadLevelAlone(const std::string& name_)
 {
 	HubWorld& rHubWorld = Globals::Game::hubWorld;
 	removeHubWorldLoaded();
+	rHubWorld.loadCount++;
 	rHubWorld.loadedAsHub = false;
 	PoolId id = loadLevel(name_);
 	rHubWorld.active = name_;
@@ -1068,12 +1136,21 @@ PoolId loadLevelAlone(const std::string& name_)
 PoolId loadHubWorld(const std::string& activeName_)
 {
 	HubWorld& rHubWorld = Globals::Game::hubWorld;
-	if(rHubWorld.levels.empty()) throw std::runtime_error("HubWorld.json has no levels");
-	const std::string& rActive = activeName_.empty() ? rHubWorld.levels.front().name : activeName_;
 	removeHubWorldLoaded();
+	rHubWorld.loadCount++;
 
 	/* loadedAsHub is set before the active level is made: loadLevel gives a level its HubWorld place only then. */
 	rHubWorld.loadedAsHub = true;
+
+	/* A HubWorld with no levels and none asked for loads as an empty one: no level, no active level, only its own entities (the editor's HubWorld tab is how its first level is added). */
+	if(activeName_.empty() && rHubWorld.levels.empty())
+	{
+		rHubWorld.active.clear();
+		buildHubWorldEntities();
+		Globals::Game::spatialIndex.rebuild();
+		return UninitializedPoolId;
+	}
+	const std::string rActive = activeName_.empty() ? rHubWorld.levels.front().name : activeName_;
 	PoolId activeId = loadLevel(rActive);
 	rHubWorld.active = rActive;
 	for(const HubWorldLevel& rEntry : rHubWorld.levels)

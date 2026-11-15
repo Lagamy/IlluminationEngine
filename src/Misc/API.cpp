@@ -71,7 +71,7 @@ PoolId activeLevelId()
 bool levelShown(PoolId levelId_)
 {
 #ifdef EDITOR
-    if(!editor.active || editor.hubWorldView || editor.hubWorldEntities || levelId_ == UninitializedPoolId) return true;
+    if(!editor.active || editor.hubWorldView || editor.hubWorldEntities || editor.hubWorldGeometry || editor.hubWorldTexturing || editor.hubWorldCollision || levelId_ == UninitializedPoolId) return true;
     return levelId_ == activeLevelId();
 #else
     return true;

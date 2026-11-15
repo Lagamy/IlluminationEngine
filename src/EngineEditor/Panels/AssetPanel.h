@@ -1,6 +1,7 @@
 #pragma once
 #include "AssetThumbnails.h"
 #include "ScopeNav.h"
+#include "MeshDiff.h"
 #include <array>
 #include <cstdint>
 #include <string>
@@ -87,6 +88,9 @@ private:
 	std::string scriptFolder;
 	/* The open script file (its path, Asset::source) while the browser is inside it showing its behaviours; empty = none open. */
 	std::string scriptFile;
+	/* The open disc texture set while the browser is inside it showing its textures (drawTextureSet); empty = none open. setTiles are its textures, read when it was opened. */
+	std::string textureSet;
+	std::vector<DiscTextureTile> setTiles;
 	/* Every folder below each script root (relative to it, "replays/old"), per game 0..Global: a folder with no file in it has no asset to show it by. */
 	std::array<std::vector<std::string>, 3> scriptDirs;
 	/* The script dialog asked for by a toolbar button or a tile's menu (NewFile, NewFolder, Delete; None = no), for drawScriptDialogs to open outside the tile child's ID stack; what it works on (the game and folder it was asked in, or the file to delete); the name field; the last result. */
@@ -158,6 +162,7 @@ private:
 	/* The indices of the list that the open level uses, for the Level folder. */
 	std::vector<int> levelIndices(int game_, int kind_, int group_) const;
 	/* The tiles of a list (all of it, or only the indices of pOnly_), clipped to the rows on screen. */
+	void drawTextureSet();
 	void drawTiles(int game_, int kind_, int group_, const std::vector<int>* pOnly_ = nullptr);
 	/* The search results, the tiles of each hit list under a heading naming the list. */
 	void drawSearch(const std::string& filter_);

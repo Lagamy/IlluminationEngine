@@ -49,6 +49,10 @@ struct Camera {
 	/* Vertical field of view in degrees. */
 	float fov = 45.0f;
 
+	/* An orthographic projection instead of the perspective one (the editor's aligned views, EditorCamera::alignTo): orthoHeight is the world height of the view; there is no fov. The near plane is moved back behind the camera (see updateProjection), so that what is beside the camera shows. */
+	bool orthographic = false;
+	float orthoHeight = 20.0f;
+
 	/* Whether the renderer draws this camera (Renderer::runAll). */
 	bool enabled = true;
 
@@ -58,6 +62,12 @@ struct Camera {
 	/* The entity that carries this camera as its module (Entity::cameraId), UninitializedPoolId for a camera made by hand. */
 	PoolId entityId = UninitializedPoolId;
     
+	/*
+	The share of the window's height, from the top, a screen camera renders into (the editor's Texturing subtab shows the viewport in the top half and its panel in the rest). viewportSize gives the smaller height, so the aspect is right, and updateProjection moves the picture up by
+	scaling and shifting the clip-space y: the viewport stays the whole window, so every window position <-> clip mapping of the editor (picking, the gizmo, the overlays) stays the same. Set it, then refreshProjection.
+	*/
+	float screenFraction = 1.0f;
+
 	glm::mat4 view;
     glm::mat4 projection;
 

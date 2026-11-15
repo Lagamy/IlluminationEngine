@@ -166,6 +166,10 @@ struct Level
 	/* The meshes of the instance's pieces with their placement in the level's space (the yaw of a Shadow level included), for rayHitsInstance. */
 	void instanceMeshes(std::vector<std::pair<const Graphics::BasicMesh*, glm::mat4>>& rMeshes_) const;
 	void destroyInstance();
+	/*
+	The level's drawn meshes with their placement in the level's space (the HubWorld place and position excluded; a glTF level's submeshes, else instanceMeshes), each mesh once, in the order the importer makes them: the ordinal of a mesh in this list is what a MeshDiff names it by (HubWorld.bin). The level owns the meshes; the editor's Geometry subtab and the loader change them.
+	*/
+	void editableMeshes(std::vector<std::pair<Graphics::BasicMesh*, glm::mat4>>& rMeshes_);
 	/* Editor / debug picking: whether the ray (world space, unit direction) crosses a triangle of the level's drawn geometry (both sides, as drawn: HubWorld place and position applied); distance_ is along the ray to the nearest one. */
 	bool rayHitsInstance(const glm::vec3& rOrigin_, const glm::vec3& rDirection_, float& rDistance_, const Graphics::BasicMesh** ppMesh_ = nullptr);
 	/* Defined by the game (Game/GameLevel.cpp): the texture of a mesh of this level's instance (one rayHitsInstance gave), as text for the debug print: an SA mesh as "<texture set> / <entry name> (id <texture id>)", a Shadow mesh as its Texture pool id; empty when the mesh is untextured or not of the instance. */

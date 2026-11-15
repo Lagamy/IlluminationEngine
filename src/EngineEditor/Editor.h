@@ -13,6 +13,9 @@
 #include "EntityListPanel.h"
 #include "InspectorPanel.h"
 #include "PrefabPanel.h"
+#include "GeometryPanel.h"
+#include "TexturingPanel.h"
+#include "CollisionPanel.h"
 #include "CollisionShape.h"
 #include "TextureChoice.h"
 #include "MeshChoice.h"
@@ -40,6 +43,15 @@ struct Editor
 
 	/* The HubWorld tab's Entities subtab is shown (EntityListPanel::draw sets it each frame): every level is drawn like in the HubWorld view, but the gizmo, the Inspector and picking work on entities, and the entity list holds only the entities the HubWorld owns (Entity::hubWorldOwned). Entities made now belong to the HubWorld. */
 	bool hubWorldEntities = false;
+
+	/* The HubWorld tab's Geometry subtab is shown (EntityListPanel::draw sets it each frame): every level is drawn like in the HubWorld view, a left click edits level geometry (GeometryPanel) instead of selecting, and the entity gizmo and Delete key do nothing. */
+	bool hubWorldGeometry = false;
+
+	/* The HubWorld tab's Texturing subtab is shown (set each frame like hubWorldGeometry): the viewport takes the top part of the window (Camera::screenFraction), the panel for the texture the rest, and a left click picks faces of level geometry (GeometryPanel::texturing). */
+	bool hubWorldTexturing = false;
+
+	/* The HubWorld tab's Collision subtab is shown (set each frame like hubWorldGeometry): every level is drawn like in the HubWorld view with its collision lines (CollisionView::draw), a left click edits level collision (CollisionPanel) instead of selecting, and the entity gizmo and Delete key do nothing. */
+	bool hubWorldCollision = false;
 
 	/*
 	The HubWorld view's state: the name of the level whose place is being edited (hubWorldSelected; empty = the active level) and whether HubWorld.json has a change that is not written yet (hubWorldDirty; set while a drag or the inspector widget runs). When it is let go (processInputs) the change counts as made (hubWorldUnsaved), and HubWorld.json is written only by Save (saveAllLevels, Ctrl+S).
@@ -104,6 +116,9 @@ struct Editor
 	Graphics::EntityListPanel entityList;
 	Graphics::InspectorPanel inspector;
 	Graphics::PrefabPanel prefabPanel;
+	Graphics::GeometryPanel geometry;
+	Graphics::TexturingPanel texturing;
+	Graphics::CollisionPanel collisionPanel;
 	Graphics::Gizmo gizmo;
 
 	/* The state of the keys the last time processInputs saw them, so that one press counts once. */
@@ -121,7 +136,7 @@ struct Editor
 	bool upPressed = false;
 	bool downPressed = false;
 	bool probePressed = false;
-	bool gizmoKeyPressed[3] = {false, false, false};
+	bool gizmoKeyPressed[6] = {false, false, false, false, false, false};
 
 	/* Click to select (processInputs): a left press the UI and the gizmo did not take is pending until the button is released (a camera hold cancels it). clickX / clickY: where the press was. */
 	bool clickLeftWas = false;
@@ -335,6 +350,8 @@ struct Editor
 	void applyAction(const UndoAction& rAction_, std::vector<UndoAction>& rOpposite_);
 	Clipboard snapshotOf(PoolId entityId_);
 	PoolId spawnFrom(const Clipboard& rCopy_, const glm::vec3& rPosition_, PoolId levelId_ = UninitializedPoolId);
+	/* Makes an entity of the prefab where the entity is (spawnFrom, with the prefab's model and texture) and removes the entity; the geometry exit menu uses it for a level's own entity, whose prefab the level file can't change. */
+	void replaceWithPrefab(PoolId entityId_, PoolId prefabId_);
 
 	/* Gives a level what keptLevels holds for it (Stop): the prefabs' edits for that level, each entity's exact state, the added entities and cameras made again. */
 	void giveKeptLevel(PoolId levelId_, const KeptLevel& rKept_);
@@ -352,7 +369,7 @@ struct Editor
 	void pasteAtCursor();
 
 	/*
-	editor_settings.json (next to Assets/, in the working directory): the panel sizes (the user drags their edges) and the editor camera's settings (EntityListPanel's "Editor camera" tab). init reads it (a missing or broken file
+	editor_settings.json (next to Assets/, in the working directory): the panel sizes (the user drags their edges) the editor camera's settings (EntityListPanel's "Editor camera" tab) and the Geometry tab's merge radius and X-ray picking (GeometryPanel::mergePixels, xray). init reads it (a missing or broken file
 	leaves the defaults); destroy writes it only when its content differs from what init read, so a run with no change leaves the file alone.
 	*/
 	void loadSettings();

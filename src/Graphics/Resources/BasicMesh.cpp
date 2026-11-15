@@ -1,5 +1,6 @@
 #include "BasicMesh.h"
 #include "RenderStats.h"
+#include "Shader.h"
 #include <cstdint>
 #include <cstddef>
 
@@ -53,8 +54,26 @@ void BasicMesh::create()
 
 void BasicMesh::draw()
 {
+	if(isolatedMesh != nullptr && isolatedMesh != this) return;
 	renderStats.vao(this->VAO);
 	glBindVertexArray(this->VAO);
+	if(!this->groups.empty() && !this->indicies.empty())
+	{
+		if(this->groups.front().firstIndex > 0)
+		{
+			renderStats.draw(this->groups.front().firstIndex);
+			glDrawElements(GL_TRIANGLES, this->groups.front().firstIndex, GL_UNSIGNED_INT, 0);
+		}
+		for(const IndexGroup& rGroup : this->groups)
+		{
+			renderStats.texture(rGroup.texture);
+			glBindTextureUnit(0, rGroup.texture);
+			glUniform1i(HasTextureLocation, 1);
+			renderStats.draw(rGroup.indexCount);
+			glDrawElements(GL_TRIANGLES, rGroup.indexCount, GL_UNSIGNED_INT, reinterpret_cast<const void*>(static_cast<uintptr_t>(rGroup.firstIndex) * sizeof(uint32_t)));
+		}
+		return;
+	}
 	renderStats.draw(this->indicies.empty() ? this->verticies.size() : this->indicies.size());
 	if(!this->indicies.empty())
     	glDrawElements(GL_TRIANGLES, this->indicies.size(), GL_UNSIGNED_INT, 0);

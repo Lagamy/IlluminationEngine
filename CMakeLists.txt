@@ -76,6 +76,8 @@ add_library(IluminationEngine STATIC
 	src/Scripting/ScriptAPI.cpp
 	src/Objects/Level.cpp
 	src/Objects/HubWorld.cpp
+	src/Objects/MeshDiff.cpp
+	src/Objects/CollisionDiff.cpp
 	src/Objects/Prefab.cpp
 	src/Objects/SpatialIndex.cpp
 	src/Loading/ResourceLoader.cpp
@@ -166,12 +168,18 @@ if(EDITOR)
 		src/EngineEditor/Debug/CollisionView.cpp
 		src/Loading/GLTFImport.cpp
 		src/Loading/ExternalPrefabs.cpp
+		src/Loading/EntityGeometry.cpp
 		src/EngineEditor/Debug/Text.cpp
 		src/EngineEditor/Panels/EntityListPanel.cpp
 		src/EngineEditor/Panels/InspectorPanel.cpp
 		src/EngineEditor/Panels/AssetPanel.cpp
 		src/EngineEditor/Panels/PrefabPanel.cpp
 		src/EngineEditor/Panels/PrefabThumbnails.cpp
+		src/EngineEditor/Panels/GeometryPanel.cpp
+		src/EngineEditor/Panels/TexturingPanel.cpp
+		src/EngineEditor/Panels/CollisionPanel.cpp
+		src/EngineEditor/EditMesh.cpp
+		src/EngineEditor/CollisionEdit.cpp
 		${IMGUI_DIR}/imgui.cpp
 		${IMGUI_DIR}/imgui_draw.cpp
 		${IMGUI_DIR}/imgui_widgets.cpp

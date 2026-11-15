@@ -23,6 +23,9 @@ Undo (Ctrl+Z) is Editor's: it notices a finished change of the selected entity's
 /* The entity under the window position (x_, y_) in pixels as the camera sees it (UninitializedPoolId if none), for click to select (Editor::processInputs). Entities are picked by the exact box of their model, else by their bounding sphere, see the definition. */
 PoolId pickEntity(GLFWwindow* pWindow_, const Camera& rCamera_, double x_, double y_);
 
+/* The ray from the camera through the window position (x_, y_) in pixels (origin and unit direction, world space). False if the window has no size. For the Geometry subtab. */
+bool windowRay(GLFWwindow* pWindow_, const Camera& rCamera_, double x_, double y_, glm::vec3& rOrigin_, glm::vec3& rDirection_);
+
 /* The level whose bounds box the ray under the window position enters first (UninitializedPoolId if none), for click to select in the HubWorld view when no entity is under the cursor. */
 PoolId pickLevel(GLFWwindow* pWindow_, const Camera& rCamera_, double x_, double y_);
 
@@ -41,6 +44,8 @@ struct Gizmo
 
 	/* True while a handle is being dragged: the camera must not start a button hold meanwhile. */
 	bool wantsMouse() const;
+	/* Whether the cursor is on a handle (a press there starts a drag); the panels then take no click of their own, so the handles come before picking. */
+	bool hovering() const { return this->hovered >= 0; }
 
 	/*
 	Picks the handle under the cursor, starts a drag on a left press on it, and applies / ends the running drag. Nothing without a selected entity. uiWantsMouse_: the cursor is on an ImGui window; cameraDragging_: the editor camera is in a button hold.

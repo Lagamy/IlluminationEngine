@@ -1,6 +1,8 @@
 #include "Camera.h"
 #include "Globals.h"
 #include "API.h"
+#include <algorithm>
+#include <glm/ext/matrix_transform.hpp>
 
 Camera::Camera(glm::vec3 position_) { 
 	this->position = position_; 
@@ -59,12 +61,26 @@ void Camera::updateView() {
 }
 
 void Camera::updateProjection(float aspect) {
-    this->projection = glm::perspective(
-        glm::radians(this->fov),
-        aspect,
-        this->nearPlane,
-        this->farPlane
-    );
+	if(this->orthographic)
+	{
+		/* The view volume starts a tenth of the far plane behind the camera: the camera of an aligned view sits a few units from what it looks at, and the rest of the level is on both sides of it. */
+		float half = this->orthoHeight * 0.5f;
+		this->projection = glm::ortho(-half * aspect, half * aspect, -half, half, -this->farPlane * 0.1f, this->farPlane);
+	}
+	else
+	{
+		this->projection = glm::perspective(
+			glm::radians(this->fov),
+			aspect,
+			this->nearPlane,
+			this->farPlane
+		);
+	}
+	if(this->screenFraction < 1.0f && this->renderTarget() == nullptr)
+	{
+		glm::mat4 fit = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f - this->screenFraction, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, this->screenFraction, 1.0f));
+		this->projection = fit * this->projection;
+	}
 }
 
 Graphics::RenderTarget* Camera::renderTarget() const {
@@ -79,7 +95,7 @@ glm::uvec2 Camera::viewportSize() const {
 	{
 		return glm::uvec2(pTarget->width, pTarget->height);
 	}
-	return glm::uvec2(Globals::App::windowWidth, Globals::App::windowHeight);
+	return glm::uvec2(Globals::App::windowWidth, std::max(1u, static_cast<uint32_t>(Globals::App::windowHeight * this->screenFraction)));
 }
 
 void Camera::refreshProjection() {

@@ -1,4 +1,5 @@
 #include "ExternalPrefabs.h"
+#include "EntityGeometry.h"
 #include "Paths.h"
 #include "Prefab.h"
 #include "Globals.h"
@@ -11,6 +12,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <stdexcept>
 
@@ -44,6 +46,12 @@ fs::path fileOf(ExternalScope scope_, bool inSource_, const std::string& levelNa
 {
 	if(scope_ == ExternalScope::Project) return (inSource_ ? fs::path(Paths::SourceDir) / "External" : fs::path(Paths::ExternalDir)) / "Prefabs" / "Global" / "prefabs.json";
 	return (inSource_ ? fs::path(Paths::SourceDir) / "Levels" : fs::path(Paths::LevelsDir)) / levelName_ / "prefabs.json";
+}
+
+/* The scope's geometry file (EntityGeometry.h) beside its prefabs.json. */
+fs::path geometryFileOf(ExternalScope scope_, bool inSource_, const std::string& levelName_)
+{
+	return fileOf(scope_, inSource_, levelName_).replace_filename("geometry.bin");
 }
 
 /* A name that becomes a prefab's name or a folder's: letters, digits, '_', '-' and ' ' (a '/' would be a path). */
@@ -100,9 +108,15 @@ void saveExternalPrefabs(ExternalScope scope_, const std::string& levelName_)
 	std::sort(folders.begin(), folders.end());
 	file["folders"] = folders;
 	file["prefabs"] = OrderedJson::array();
+	std::vector<LevelMeshDiffs> geometry;
 	for(const Prefab* pPrefab : prefabs)
 	{
 		OrderedJson entry = {{"name", pPrefab->name}, {"folder", pPrefab->folder}};
+		if(const PrefabGeometry* pGeometry = prefabGeometry(externalPrefabPoolName(scope_, level, pPrefab->name)))
+		{
+			entry["geometry"] = {{"source", pGeometry->source}, {"mesh", pGeometry->discMesh}, {"texture", pGeometry->discTexture}};
+			geometry.push_back({pPrefab->name, pGeometry->meshes});
+		}
 		if(pPrefab->definition.mesh.kind == MeshChoiceKind::External) entry["mesh"] = writeChoice(pPrefab->definition.mesh.name);
 		if(pPrefab->definition.texture.kind == TextureChoiceKind::External) entry["texture"] = writeChoice(pPrefab->definition.texture.name);
 		file["prefabs"].push_back(entry);
@@ -117,6 +131,22 @@ void saveExternalPrefabs(ExternalScope scope_, const std::string& levelName_)
 		if(!out) throw std::runtime_error(std::format("can't write {}.", path.string()));
 		out << text;
 	}
+
+	/* The geometry edits of the prefabs that have them; no prefab with one removes the file. */
+	std::vector<uint8_t> bytes = writeMeshDiffs(geometry);
+	for(bool inSource : {false, true})
+	{
+		fs::path path = geometryFileOf(scope_, inSource, level);
+		if(geometry.empty())
+		{
+			std::error_code ignored;
+			fs::remove(path, ignored);
+			continue;
+		}
+		std::ofstream out(path, std::ios::binary);
+		if(!out) throw std::runtime_error(std::format("can't write {}.", path.string()));
+		out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+	}
 }
 
 void loadExternalPrefabs(ExternalScope scope_, const std::string& levelName_)
@@ -129,6 +159,19 @@ void loadExternalPrefabs(ExternalScope scope_, const std::string& levelName_)
 	{
 		OrderedJson file = OrderedJson::parse(stream);
 		for(const OrderedJson& rFolder : file.value("folders", OrderedJson::array())) rFolders.push_back(rFolder.get<std::string>());
+		std::vector<LevelMeshDiffs> geometry;
+		std::ifstream binary(geometryFileOf(scope_, false, levelName_), std::ios::binary);
+		if(binary)
+		{
+			try
+			{
+				geometry = readMeshDiffs(std::vector<uint8_t>(std::istreambuf_iterator<char>(binary), std::istreambuf_iterator<char>()));
+			}
+			catch(const std::exception& rError)
+			{
+				std::fprintf(stderr, "Prefab geometry not read (%s): %s\n", geometryFileOf(scope_, false, levelName_).string().c_str(), rError.what());
+			}
+		}
 		for(const OrderedJson& rEntry : file.value("prefabs", OrderedJson::array()))
 		{
 			try
@@ -139,7 +182,17 @@ void loadExternalPrefabs(ExternalScope scope_, const std::string& levelName_)
 				if(rEntry.contains("texture")) texture = TextureChoice{TextureChoiceKind::External, rEntry.at("texture").at("name").get<std::string>()};
 				std::string folder = rEntry.value("folder", std::string());
 				if(!folder.empty() && std::find(rFolders.begin(), rFolders.end(), folder) == rFolders.end()) rFolders.push_back(folder);
-				addExternalPrefab(scope_ == ExternalScope::Level, levelName_, rEntry.at("name").get<std::string>(), folder, mesh, texture);
+				std::string name = rEntry.at("name").get<std::string>();
+				addExternalPrefab(scope_ == ExternalScope::Level, levelName_, name, folder, mesh, texture);
+				if(rEntry.contains("geometry"))
+				{
+					PrefabGeometry record{rEntry.at("geometry").at("source").get<std::string>(), rEntry.at("geometry").value("mesh", std::string()), rEntry.at("geometry").value("texture", std::string()), {}};
+					for(const LevelMeshDiffs& rDiffs : geometry)
+					{
+						if(rDiffs.level == name) record.meshes = rDiffs.meshes;
+					}
+					setPrefabGeometry(externalPrefabPoolName(scope_, levelName_, name), std::move(record));
+				}
 			}
 			catch(const std::exception& rError)
 			{
@@ -152,10 +205,12 @@ void loadExternalPrefabs(ExternalScope scope_, const std::string& levelName_)
 		std::fprintf(stderr, "External prefabs not read (%s): %s\n", fileOf(scope_, false, levelName_).string().c_str(), rError.what());
 	}
 	std::sort(rFolders.begin(), rFolders.end());
+	rebuildEditedModels(scope_, levelName_);
 }
 
 void unloadLevelPrefabs(const std::string& levelName_)
 {
+	forgetLevelGeometry(levelName_);
 	levelFolders.erase(levelName_);
 	removeLevelPrefabs(levelName_);
 }

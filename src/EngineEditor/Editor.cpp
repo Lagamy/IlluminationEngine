@@ -42,6 +42,12 @@ void Editor::loadSettings()
 	this->inspector.width = std::clamp(json.value("inspectorWidth", this->inspector.width), 200.0f, 2000.0f);
 	this->prefabPanel.height = std::clamp(json.value("prefabPanelHeight", this->prefabPanel.height), 100.0f, 2000.0f);
 	if(json.contains("scriptEditor") && json["scriptEditor"].is_string()) std::snprintf(this->prefabPanel.assets.scriptEditorCommand, sizeof(this->prefabPanel.assets.scriptEditorCommand), "%s", json["scriptEditor"].get<std::string>().c_str());
+	if(json.contains("geometry") && json["geometry"].is_object())
+	{
+		const Json& rGeometry = json["geometry"];
+		this->geometry.mergePixels = std::clamp(rGeometry.value("mergePixels", this->geometry.mergePixels), 2.0f, 60.0f);
+		this->geometry.xray = rGeometry.value("xray", this->geometry.xray);
+	}
 	if(!json.contains("camera") || !json["camera"].is_object()) return;
 	const Json& rCamera = json["camera"];
 	EditorCamera& rEditorCamera = this->camera;
@@ -64,6 +70,7 @@ void Editor::saveSettings()
 	json["inspectorWidth"] = this->inspector.width;
 	json["prefabPanelHeight"] = this->prefabPanel.height;
 	json["scriptEditor"] = std::string(this->prefabPanel.assets.scriptEditorCommand);
+	json["geometry"] = {{"mergePixels", this->geometry.mergePixels}, {"xray", this->geometry.xray}};
 	const EditorCamera& rCamera = this->camera;
 	json["camera"] = {
 		{"lookSensitivity", rCamera.lookSensitivity},
@@ -153,6 +160,32 @@ void Editor::saveAllLevels()
 		catch(const std::exception& rError)
 		{
 			hubWorldNote = std::string(" HubWorld.json not written: ") + rError.what();
+		}
+	}
+	/* The geometry edits of the Geometry subtab go to HubWorld.bin. */
+	if(this->geometry.unsaved())
+	{
+		try
+		{
+			this->geometry.save();
+			hubWorldNote += " Wrote HubWorld.bin.";
+		}
+		catch(const std::exception& rError)
+		{
+			hubWorldNote += std::string(" HubWorld.bin not written: ") + rError.what();
+		}
+	}
+	/* The collision edits of the Collision subtab go to HubWorld.collision.bin. */
+	if(this->collisionPanel.unsaved())
+	{
+		try
+		{
+			this->collisionPanel.save();
+			hubWorldNote += " Wrote HubWorld.collision.bin.";
+		}
+		catch(const std::exception& rError)
+		{
+			hubWorldNote += std::string(" HubWorld.collision.bin not written: ") + rError.what();
 		}
 	}
 	if(saved == 0 && failed.empty() && hubWorldNote.empty()) this->fileMessage = "Nothing saved: no level loaded.";
@@ -635,7 +668,7 @@ Editor::Clipboard Editor::snapshotOf(PoolId entityId_)
 	else if(rEntity.prefabId != UninitializedPoolId && (levelId != UninitializedPoolId || rEntity.hubWorldOwned))
 	{
 		PrefabKind kind = Globals::Game::prefabs[rEntity.prefabId].kind;
-		if(kind == PrefabKind::DantePlayer)
+		if(isPlayerPrefabKind(kind))
 		{
 			this->fileMessage = "Nothing copied: a player can't be copied.";
 			return copy;
@@ -655,6 +688,25 @@ Editor::Clipboard Editor::snapshotOf(PoolId entityId_)
 	}
 	copy.valid = true;
 	return copy;
+}
+
+/* The entity is replaced by one of the prefab at the same place, with its behaviours, shapes and field values, and the prefab's model and texture; the level owns the new one, and the old one, if the level's own, is recorded as removed. */
+void Editor::replaceWithPrefab(PoolId entityId_, PoolId prefabId_)
+{
+	if(!entityExists(entityId_)) return;
+	Clipboard copy = this->snapshotOf(entityId_);
+	if(!copy.valid) return;
+	const Entity& rOld = getEntity(entityId_);
+	PoolId levelId = rOld.levelId;
+	glm::vec3 position = rOld.position;
+	const Prefab& rPrefab = Globals::Game::prefabs[prefabId_];
+	copy.prefabId = prefabId_;
+	copy.entity.mesh = prefabMesh(rPrefab, levelId);
+	copy.entity.texture = prefabTexture(rPrefab, levelId);
+	PoolId newId = this->spawnFrom(copy, position, levelId);
+	if(newId == UninitializedPoolId) return;
+	this->removeEntity(entityId_);
+	this->entityList.selectOnly(newId);
 }
 
 void Editor::copySelected()
@@ -775,15 +827,11 @@ void Editor::loadLevel(const std::string& levelName_, const char* pMode_)
 
 void Editor::loadHubWorld()
 {
-	if(Globals::Game::hubWorld.levels.empty())
-	{
-		this->fileMessage = "Load HubWorld: HubWorld.json has no levels.";
-		return;
-	}
+	const bool empty = Globals::Game::hubWorld.levels.empty();
 	this->hubWorldSelected.clear();
 	this->hubWorldExtraSelected.clear();
-	this->loadLevel(Globals::Game::hubWorld.levels.front().name, "hub");
-	this->fileMessage = "Loaded the HubWorld, active level " + Globals::Game::hubWorld.levels.front().name + " (a failure is on stderr).";
+	this->loadLevel(empty ? std::string() : Globals::Game::hubWorld.levels.front().name, "hub");
+	this->fileMessage = empty ? "Loaded the HubWorld, empty: HubWorld.json has no levels (add one in the HubWorld tab)." : "Loaded the HubWorld, active level " + Globals::Game::hubWorld.levels.front().name + " (a failure is on stderr).";
 }
 
 bool Editor::levelPlace(const std::string& name_, HubWorldLevel& rPlace_) const
@@ -867,15 +915,7 @@ void Editor::addLevelToHubWorld(const std::string& name_)
 	{
 		Globals::Game::hubWorld.set(place);
 
-		/* Not in the HubWorld's load (Load level): the entry is written, the level is not loaded beside the active one, where it would overlap it at the origin. */
-		if(!Globals::Game::hubWorld.loadedAsHub)
-		{
-			this->hubWorldSelected = name_;
-			this->hubWorldExtraSelected.clear();
-			this->hubWorldDirty = true;
-			this->fileMessage = "Added " + name_ + " to the HubWorld (not loaded: the level was loaded alone).";
-			return;
-		}
+		/* Also after Load level (not the HubWorld's load): the level is loaded beside the active one so it can be seen and moved; it starts at the origin, where it overlaps the others until it is moved, as in the HubWorld's load. loadLevel gives it no HubWorld place then (the place is the origin anyway). */
 		try
 		{
 			PoolId id = Loading::loadLevel(name_);
@@ -1325,6 +1365,21 @@ void Editor::processInputs()
 	GLFWwindow* pWindow = Globals::App::window;
 	EditorCamera& rCamera = this->camera;
 
+	/*
+	The Texturing subtab splits the screen (Camera::screenFraction). Its flag is set by the panel that draws it, which is not drawn while the editor is inactive (Play), so it is cleared here and the camera is whole again at once, not when the panel is next drawn.
+	*/
+	if(!this->active)
+	{
+		this->hubWorldTexturing = false;
+		this->hubWorldCollision = false;
+	}
+	float screenFraction = this->hubWorldTexturing ? Graphics::TexturingPanel::ViewportFraction : 1.0f;
+	if(rCamera.screenFraction != screenFraction)
+	{
+		rCamera.screenFraction = screenFraction;
+		rCamera.refreshProjection();
+	}
+
 	/* The camera only reacts while the editor is active: outside it the keys control the player, and the gameplay camera follows it (main.cpp updateFollowCamera). The keys are left to the UI while it has a text field. */
 	if(this->active)
 	{
@@ -1361,10 +1416,14 @@ void Editor::processInputs()
 		bool keyboardFree = !this->debugUI.wantsKeyboard();
 		bool ctrlDown = glfwGetKey(pWindow, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
 		bool shortcutKeyDown = glfwGetKey(pWindow, GLFW_KEY_Z) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_Y) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_C) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_V) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_S) == GLFW_PRESS;
-		if(keyboardFree && !(ctrlDown && shortcutKeyDown)) rCamera.processKeys(pWindow, Globals::App::deltaTime);
+		/* In the Geometry and Texturing subtabs undo and save are Shift + Z and Shift + S (Ctrl switches the mesh editing's merging); Shift is the camera's fast fly and S flies back, so they fly nothing then. */
+		bool meshTabs = this->hubWorldGeometry || this->hubWorldTexturing;
+		bool shiftDown = glfwGetKey(pWindow, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+		bool meshShortcut = meshTabs && shiftDown && (glfwGetKey(pWindow, GLFW_KEY_Z) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_S) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_Y) == GLFW_PRESS);
+		if(keyboardFree && !(ctrlDown && shortcutKeyDown) && !meshShortcut) rCamera.processKeys(pWindow, Globals::App::deltaTime);
 
 		/*
-		Ctrl+Z undo, Ctrl+Y redo, Ctrl+C copy, Ctrl+V paste at the cursor, Ctrl+S save the level (the File menu's Save): each once per press. They need the keyboard free (no text field) and the editor camera not in a button hold. Ctrl alone still flies down; with one of these keys it flies nothing (S would fly back).
+		Ctrl+Z undo, Ctrl+Y redo, Ctrl+C copy, Ctrl+V paste at the cursor, Ctrl+S save the level (the File menu's Save): each once per press. They need the keyboard free (no text field) and the editor camera not in a button hold. With one of these keys the camera flies nothing (S would fly back).
 		*/
 		bool zDown = glfwGetKey(pWindow, GLFW_KEY_Z) == GLFW_PRESS;
 		bool yDown = glfwGetKey(pWindow, GLFW_KEY_Y) == GLFW_PRESS;
@@ -1373,18 +1432,25 @@ void Editor::processInputs()
 		bool vKey = glfwGetKey(pWindow, GLFW_KEY_V) == GLFW_PRESS;
 		if(keyboardFree && ctrlDown && !rCamera.dragging)
 		{
-			if(zDown && !this->zPressed) this->undo();
-			if(yDown && !this->yPressed) this->redo();
+			if(zDown && !this->zPressed && !meshTabs) this->undo();
+			if(yDown && !this->yPressed && !meshTabs) this->redo();
 			if(cKey && !this->cPressed) this->copySelected();
 			if(vKey && !this->vPressed) this->pasteAtCursor();
-			if(sDown && !this->sPressed)
+			if(sDown && !this->sPressed && !meshTabs)
 			{
 				this->saveAllLevels();
 			}
 		}
+		/* Shift + Z undoes the open mesh's last edit (a move, a created vertex or face, a texture or UV edit, a delete), Shift + Y does it again, Shift + S saves, in the Geometry and Texturing subtabs. */
+		if(keyboardFree && meshTabs && shiftDown && !ctrlDown && !rCamera.dragging)
+		{
+			if(zDown && !this->zPressed) this->fileMessage = this->geometry.undo() ? "Undid a mesh edit." : "Nothing to undo in this mesh.";
+			if(yDown && !this->yPressed) this->fileMessage = this->geometry.redo() ? "Redid a mesh edit." : "Nothing to redo in this mesh.";
+			if(sDown && !this->sPressed) this->saveAllLevels();
+		}
 		/* Delete removes the selected entities (deleteSelected), once per press, with the keyboard free. */
 		bool deleteDown = glfwGetKey(pWindow, GLFW_KEY_DELETE) == GLFW_PRESS;
-		if(keyboardFree && !rCamera.dragging && deleteDown && !this->deletePressed && !this->hubWorldView) this->deleteSelected();
+		if(keyboardFree && !rCamera.dragging && deleteDown && !this->deletePressed && !this->hubWorldView && !this->hubWorldGeometry && !this->hubWorldTexturing && !this->hubWorldCollision) this->deleteSelected();
 		this->deletePressed = deleteDown;
 		this->zPressed = zDown;
 		this->yPressed = yDown;
@@ -1394,7 +1460,18 @@ void Editor::processInputs()
 		/*
 		The gizmo takes a left press on one of its handles and keeps the mouse until the handle is released. 1 / 2 / 3 pick Move / Rotate / Scale (W is a fly key, so W E R is not used); not during a drag or a camera hold, nor while a text field has the keyboard.
 		*/
-		if(this->hubWorldView)
+		this->geometry.texturing = this->hubWorldTexturing;
+		this->geometry.island = this->hubWorldTexturing && this->texturing.editMode;
+		if(this->hubWorldTexturing) this->geometry.mode = Graphics::GeometryPanel::Face;
+		/* Move is the only gizmo these subtabs use, and keys 1-3 no longer change it there, so it is set here (a Rotate or Scale left over from elsewhere would do nothing). */
+		if(this->hubWorldGeometry || this->hubWorldTexturing || this->hubWorldCollision) this->gizmo.mode = Graphics::Gizmo::Move;
+		if(this->hubWorldGeometry || this->hubWorldTexturing) this->geometry.update(pWindow, rCamera, this->gizmo, this->debugUI.wantsMouse(), rCamera.dragging);
+		else this->geometry.releaseIsolation();
+		if(this->hubWorldCollision) this->collisionPanel.update(pWindow, rCamera, this->gizmo, this->debugUI.wantsMouse(), rCamera.dragging);
+		PoolId replacedId;
+		PoolId replacingPrefabId;
+		if(this->geometry.takeReplacement(replacedId, replacingPrefabId)) this->replaceWithPrefab(replacedId, replacingPrefabId);
+		else if(this->hubWorldView)
 		{
 			std::vector<HubWorldLevel> places;
 			std::vector<glm::vec3> positions;
@@ -1417,11 +1494,25 @@ void Editor::processInputs()
 				}
 			}
 		}
-		else this->gizmo.update(pWindow, rCamera, this->entityList.selection(), this->debugUI.wantsMouse(), rCamera.dragging);
-		for(int i = 0; i < 3; i++)
+		else if(!this->hubWorldCollision && !this->hubWorldGeometry && !this->hubWorldTexturing) this->gizmo.update(pWindow, rCamera, this->entityList.selection(), this->debugUI.wantsMouse(), rCamera.dragging);
+		/*
+		In the Geometry, Texturing and Collision subtabs 1-6 align the camera to a view instead (the Move gizmo is the only one they use): 1 looks along -Z, 2 along +Z, 3 along -X, 4 along +X, 5 down, 6 up. The camera keeps its distance to the selected vertices' centre and looks at it; with nothing selected it turns in place.
+		*/
+		bool viewKeys = this->hubWorldGeometry || this->hubWorldTexturing || this->hubWorldCollision;
+		/* Another tab (or the view) ends the aligned, orthographic view. */
+		if(!viewKeys && rCamera.aligned) rCamera.leaveAligned();
+		for(int i = 0; i < 6; i++)
 		{
 			bool keyDown = glfwGetKey(pWindow, GLFW_KEY_1 + i) == GLFW_PRESS;
-			if(keyDown && !this->gizmoKeyPressed[i] && !this->gizmo.wantsMouse() && !rCamera.dragging && !this->debugUI.wantsKeyboard()) this->gizmo.mode = static_cast<Graphics::Gizmo::Mode>(i);
+			bool pressed = keyDown && !this->gizmoKeyPressed[i] && !this->gizmo.wantsMouse() && !rCamera.dragging && !this->debugUI.wantsKeyboard();
+			if(pressed && viewKeys)
+			{
+				const glm::vec3 directions[6] = {{0.0f, 0.0f, -1.0f}, {0.0f, 0.0f, 1.0f}, {-1.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}};
+				glm::vec3 target;
+				bool hasTarget = !this->hubWorldCollision && this->geometry.handle(target);
+				rCamera.alignTo(directions[i], hasTarget ? &target : nullptr);
+			}
+			else if(pressed && i < 3) this->gizmo.mode = static_cast<Graphics::Gizmo::Mode>(i);
 			this->gizmoKeyPressed[i] = keyDown;
 		}
 
@@ -1430,7 +1521,7 @@ void Editor::processInputs()
 		With Shift held the entity (in the HubWorld view, the level) is added to the selection or, if it is selected, removed from it. Shift is used, not Ctrl: Ctrl flies the camera down.
 		*/
 		bool clickDown = glfwGetMouseButton(pWindow, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-		if(clickDown && !this->clickLeftWas && !rCamera.dragging && !this->debugUI.wantsMouse() && !this->gizmo.wantsMouse())
+		if(clickDown && !this->clickLeftWas && !rCamera.dragging && !this->debugUI.wantsMouse() && !this->gizmo.wantsMouse() && !this->hubWorldGeometry && !this->hubWorldTexturing && !this->hubWorldCollision)
 		{
 			this->clickPending = true;
 			glfwGetCursorPos(pWindow, &this->clickX, &this->clickY);
@@ -1472,6 +1563,14 @@ void Editor::processInputs()
 			{
 				if(Globals::Game::levels.alive[i]) Globals::Game::levels.objects[i].commitHubWorldCollision();
 			}
+		}
+		rCamera.rightSelects = this->hubWorldGeometry || this->hubWorldTexturing || this->hubWorldCollision;
+		/* In the Geometry and Texturing subtabs the middle button turns the camera about the middle of the open mesh instead of panning (no open mesh: it pans). */
+		if(!rCamera.dragging)
+		{
+			glm::vec3 orbitCenter;
+			rCamera.middleOrbits = (this->hubWorldGeometry || this->hubWorldTexturing) && glfwGetMouseButton(pWindow, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS && this->geometry.center(orbitCenter);
+			if(rCamera.middleOrbits) rCamera.orbitCenter = orbitCenter;
 		}
 		if(rCamera.updateDrag(pWindow, this->debugUI.wantsMouse() || this->gizmo.wantsMouse())) this->cursorFree = !rCamera.dragging;
 	}

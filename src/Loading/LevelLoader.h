@@ -22,7 +22,7 @@ namespace Loading
     PoolId loadLevelAlone(const std::string& name_);
 
     /*
-    The HubWorld's load (HubWorld.h): removes the levels the last load made beside its active one, then loads every level of HubWorld.json, each at its place (loadedAsHub true: loadLevel gives a level its place), and makes the HubWorld's own entities (HubWorld.json "entities"; both loads remove them first). The active level is the one named (empty = the first entry of HubWorld.json) and is returned. A level that fails is on stderr and skipped; the active one failing throws like loadLevel, and so does a HubWorld with no levels. What the scripts' sf.loadHubWorld and the editor's Load HubWorld / Choose as active use.
+    The HubWorld's load (HubWorld.h): removes the levels the last load made beside its active one, then loads every level of HubWorld.json, each at its place (loadedAsHub true: loadLevel gives a level its place), and makes the HubWorld's own entities (HubWorld.json "entities"; both loads remove them first). The active level is the one named (empty = the first entry of HubWorld.json) and is returned. A level that fails is on stderr and skipped; the active one failing throws like loadLevel. A HubWorld with no levels and no name given loads empty (loadedAsHub true, no level; returns UninitializedPoolId). What the scripts' sf.loadHubWorld and the editor's Load HubWorld / Choose as active use.
     */
     PoolId loadHubWorld(const std::string& activeName_);
 

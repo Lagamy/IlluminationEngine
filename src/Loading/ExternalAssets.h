@@ -6,7 +6,7 @@
 
 /*
 Finds the external assets (files in Assets/External, formats in Importers/External/ModelFile.h and TextureFile.h) and registers them in two separate sets of pools (Graphics::externalProject and
-externalLevels, ExternalModel.h): the project's, "Global" in the editor (Assets/External/Models|Textures) and the opened level's (Assets/Levels/<levelName>/Models|Textures, next to the level's file). Disc assets are never involved. Custom vertex layouts go to Graphics::vertexLayouts and stay for the run, so meshes never point at a dead layout.
+externalLevels, ExternalModel.h): the project's, "Global" in the editor (Assets/External/Models|Textures) and the opened level's (Assets/Levels/<levelName>/Models|Textures, next to the level's file). Disc assets are not read here (a face texture of the disc is resolved by findFaceTexture, MeshDiff.h). Custom vertex layouts go to Graphics::vertexLayouts and stay for the run, so meshes never point at a dead layout.
 */
 namespace Loading
 {
@@ -35,6 +35,18 @@ slashes). The files are also copied into the source tree (External/ or Levels/<l
 */
 void importExternalTexture(const std::string& name_, Graphics::Texture texture_, ExternalScope scope_);
 void importExternalModel(External::ModelData model_, ExternalScope scope_);
+
+/*
+Registers a model built at run time in rPools_ (a model of that name there is replaced; its pointer dies, see findExternalModel) without writing any file: the editor's entity geometry (EngineEditor/EntityGeometry.h) makes its models this way, in its own pools while it edits and in the scope's when a prefab keeps them.
+Textures are looked up as importExternalModel does. Returns the registered model; throws as importExternalModel does. Needs the GL context.
+*/
+const Graphics::ExternalModel& addExternalModel(Graphics::ExternalPools& rPools_, bool inProject_, External::ModelData model_);
+
+/* The model's file read again (the editor edits a copy of it). A model that was not read from a file (the editor's entity geometry makes its own) throws std::runtime_error. */
+External::ModelData readExternalModelFile(const Graphics::ExternalModel& rModel_);
+
+/* The pools of the scope (the level's are the active level's). */
+Graphics::ExternalPools& externalPoolsOf(ExternalScope scope_);
 
 /* Counts every change of the pools (scan, import): a list built from them (the Assets tab) is stale when it differs from the value it was built at. */
 uint32_t externalRevision();

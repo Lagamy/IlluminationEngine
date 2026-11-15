@@ -18,6 +18,8 @@ namespace Paths
 	inline constexpr const char* ScriptsDir = "Assets/Scripts";
 	inline constexpr const char* Shaders = "Assets/Shaders/";
 	inline constexpr const char* HubWorld = "Assets/HubWorld.json";
+	inline constexpr const char* HubWorldBin = "Assets/HubWorld.bin";
+	inline constexpr const char* HubWorldCollisionBin = "Assets/HubWorld.collision.bin";
 	inline constexpr const char* Remaps = "Assets/External/Collision/Remaps.json";
 	inline constexpr const char* BoundAreas = "Assets/External/Collision/BoundAreas.json";
 	inline constexpr const char* CatalogFile = "Assets/Catalog/AssetCatalog.tsv";
@@ -28,6 +30,8 @@ namespace Paths
 	inline constexpr const char* SourceLevels = SF_SOURCE_DIR "/Levels/";
 	inline constexpr const char* SourceExternal = SF_SOURCE_DIR "/External/";
 	inline constexpr const char* SourceHubWorld = SF_SOURCE_DIR "/HubWorld.json";
+	inline constexpr const char* SourceHubWorldBin = SF_SOURCE_DIR "/HubWorld.bin";
+	inline constexpr const char* SourceHubWorldCollisionBin = SF_SOURCE_DIR "/HubWorld.collision.bin";
 	inline constexpr const char* SourceBoundAreas = SF_SOURCE_DIR "/External/Collision/BoundAreas.json";
 	inline constexpr const char* SourceRemaps = SF_SOURCE_DIR "/External/Collision/Remaps.json";
 #endif

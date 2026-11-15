@@ -117,10 +117,12 @@ struct Entity
 	void updateInstance(float deltaTime_);
 	/* The bounding sphere of the instance's model in its own space, with the engine's own turn applied (instanceTurn); computed once per mesh. Without an instance or for an engine that has none, an invalid one. */
 	Graphics::BoundingSphere instanceBounds();
-	/* Editor picking (rayHitsModel): the turn the engine gives the model before the entity's transform (identity for most), whether the instance's meshes are posed (animated, so its rest pose box can't reject a ray), and its meshes with their placement in the model's space. */
+	/* Editor picking (rayHitsModel): the turn the engine gives the model before the entity's transform (identity for most), whether the instance's meshes are posed (animated, so its rest pose box can't reject a ray), and its meshes with their placement in the model's space (rest_: the rest pose even when a pose is built, the editor's entity geometry bakes that). */
 	glm::mat4 instanceTurn() const;
 	bool instancePosed() const;
-	void instanceMeshes(std::vector<std::pair<const Graphics::BasicMesh*, glm::mat4>>& rMeshes_) const;
+	void instanceMeshes(std::vector<std::pair<const Graphics::BasicMesh*, glm::mat4>>& rMeshes_, bool rest_ = false) const;
+	/* The texture a mesh of instanceMeshes is drawn with, as a face texture name ("disc:<set>#<texture>", see findFaceTexture in MeshDiff.h; set = discTexture()); empty if it has none. For the editor's entity geometry (EditMesh::ownTexture). */
+	std::string instanceMeshTexture(const Graphics::BasicMesh* pMesh_) const;
 	/* Draws the instance (or, with pOverrideModel set, the external model with the instance's shader and texture) at transform. Called by draw once the entity passed the culling. */
 	void drawInstance();
 	/* Removes the instance from its pool. Called by destroy. */

@@ -1,5 +1,8 @@
 #pragma once
 #include "PoolId.h"
+#include "MeshDiff.h"
+#include "CollisionDiff.h"
+#include <map>
 #include <string>
 #include <vector>
 #include <glm/glm.hpp>
@@ -43,7 +46,20 @@ struct HubWorld
 	std::vector<HubWorldEntity> entities;
 	std::vector<PoolId> entityIds;
 
-	/* Reads Assets/HubWorld.json; a missing file leaves the HubWorld empty, a wrong one is reported on stderr and leaves it empty. */
+	/* The geometry edits of the levels (Assets/HubWorld.bin, MeshDiff.h): read with the file, applied by Loading::loadLevel while loadedAsHub, written by writeMeshEdits. */
+	std::vector<LevelMeshDiffs> meshEdits;
+	/* The collision edits of the levels (Assets/HubWorld.collision.bin, CollisionDiff.h): read with the file, applied by Loading::loadLevel while loadedAsHub, written by writeCollisionEdits. */
+	std::vector<LevelCollisionDiff> collisionEdits;
+	/* Counts the loads (Loading::loadHubWorld, loadLevelAlone): the editor's Geometry subtab drops its meshes when it changes, since a load makes the meshes again. */
+	uint32_t loadCount = 0;
+#ifdef EDITOR
+	/* The imported meshes (before their diff) of the meshes the editor has opened or a diff was applied to, by level name and ordinal: what a diff is worked out against. Kept over loads, as the import is the same each time. */
+	std::map<std::pair<std::string, uint32_t>, MeshOriginal> meshOriginals;
+	/* The imported collision (before its diff) of the levels whose collision a diff was applied to or the editor opened, by level name. */
+	std::map<std::string, Physics::CollisionMesh> collisionOriginals;
+#endif
+
+	/* Reads Assets/HubWorld.json, Assets/HubWorld.bin and Assets/HubWorld.collision.bin (none = no geometry or collision edits; a wrong one is on stderr and leaves none); a missing file leaves the HubWorld empty, a wrong one is reported on stderr and leaves it empty. */
 	void read();
 	/* The entry of a level name, nullptr if the HubWorld has none. */
 	const HubWorldLevel* find(const std::string& rName_) const;
@@ -54,5 +70,9 @@ struct HubWorld
 #ifdef EDITOR
 	/* Writes HubWorld.json to Assets/ and to the source tree. Throws std::runtime_error if a file can't be written. */
 	void write() const;
+	/* Writes HubWorld.bin to Assets/ and to the source tree (no edits at all removes both files). Throws std::runtime_error if a file can't be written. */
+	void writeMeshEdits() const;
+	/* Writes HubWorld.collision.bin the same way. */
+	void writeCollisionEdits() const;
 #endif
 };

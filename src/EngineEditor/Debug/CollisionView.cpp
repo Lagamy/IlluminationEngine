@@ -323,10 +323,11 @@ static void addShapeLines(AddLine addLine_, const Physics::CollisionShape& rShap
 
 void CollisionView::draw(const Camera& rCamera_)
 {
-	if(!editor.active || (!this->enabled && !this->boundAreaTabActive && this->markers.empty() && !editor.hubWorldView)) return;
+	bool levelLines = this->enabled || editor.hubWorldCollision;
+	if(!editor.active || (!levelLines && !this->boundAreaTabActive && this->markers.empty() && !editor.hubWorldView)) return;
 
 	std::vector<PoolId> levelCollisions;
-	if(this->enabled)
+	if(levelLines)
 	{
 		for(uint32_t i = 0; i < Globals::Game::levels.objects.size(); i++)
 		{
@@ -426,7 +427,7 @@ void CollisionView::draw(const Camera& rCamera_)
 	glm::mat4 identity(1.0f);
 	glUniformMatrix4fv(rShader.modelLocation, 1, GL_FALSE, glm::value_ptr(identity));
 
-	if(this->enabled && this->levelVertexCount > 0)
+	if(levelLines && this->levelVertexCount > 0)
 	{
 		/* The cells that are within drawDistance (and the far plane) and not outside the frustum, drawn as ranges of the one buffer. */
 		std::array<glm::vec4, 6> planes = rCamera_.frustumPlanes();

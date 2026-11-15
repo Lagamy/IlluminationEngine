@@ -67,7 +67,8 @@ Frame makeFrame(const Camera& rCamera_, const Gizmo::Target& rTarget_, Gizmo::Mo
 		if(mode_ == Gizmo::Scale) frame.axes[i] = glm::normalize(glm::vec3(rTarget_.rotation[i]));
 	}
 	float depth = std::max(glm::dot(frame.origin - rCamera_.position, rCamera_.front), rCamera_.nearPlane);
-	frame.unitsPerPixel = 2.0f * depth * std::tan(glm::radians(rCamera_.fov) * 0.5f) / static_cast<float>(std::max(rCamera_.viewportSize().y, 1u));
+	float viewHeight = rCamera_.orthographic ? rCamera_.orthoHeight : 2.0f * depth * std::tan(glm::radians(rCamera_.fov) * 0.5f);
+	frame.unitsPerPixel = viewHeight / static_cast<float>(std::max(rCamera_.viewportSize().y, 1u));
 	frame.length = HandleLengthPixels * frame.unitsPerPixel;
 	return frame;
 }
@@ -403,6 +404,15 @@ void Gizmo::drive(GLFWwindow* pWindow_, const Camera& rCamera_, Target& rTarget_
 	this->startPosition = rTarget_.position;
 	this->startRotation = rTarget_.rotation;
 	this->startScale = rTarget_.scale;
+}
+
+bool windowRay(GLFWwindow* pWindow_, const Camera& rCamera_, double x_, double y_, glm::vec3& rOrigin_, glm::vec3& rDirection_)
+{
+	Ray ray;
+	if(!rayAt(pWindow_, rCamera_, x_, y_, ray)) return false;
+	rOrigin_ = ray.origin;
+	rDirection_ = ray.direction;
+	return true;
 }
 
 /*

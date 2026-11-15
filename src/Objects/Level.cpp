@@ -188,6 +188,25 @@ void Level::draw(const Camera& rCamera_)
 	else this->drawInstance(base, rCamera_);
 }
 
+void Level::editableMeshes(std::vector<std::pair<Graphics::BasicMesh*, glm::mat4>>& rMeshes_)
+{
+	if(this->instanceId == UninitializedPoolId) return;
+	std::vector<std::pair<const Graphics::BasicMesh*, glm::mat4>> meshes;
+	if(this->sourceEngine == GLTF_FILE)
+	{
+		for(const Graphics::GLTFLevelSubmesh& rSubmesh : Graphics::gltfLevelInstances[this->instanceId].submeshes) meshes.push_back({&rSubmesh.mesh, glm::mat4(1.0f)});
+	}
+	else this->instanceMeshes(meshes);
+
+	/* instanceMeshes hands out const pointers for picking; the meshes are the level's own and not const. A mesh several pieces share is listed once (a diff on it is applied once). */
+	for(const auto& [pMesh, rWorld] : meshes)
+	{
+		Graphics::BasicMesh* pEditable = const_cast<Graphics::BasicMesh*>(pMesh);
+		bool listed = std::any_of(rMeshes_.begin(), rMeshes_.end(), [&](const auto& rEntry_) { return rEntry_.first == pEditable; });
+		if(!listed) rMeshes_.push_back({pEditable, rWorld});
+	}
+}
+
 bool Level::rayHitsInstance(const glm::vec3& rOrigin_, const glm::vec3& rDirection_, float& rDistance_, const Graphics::BasicMesh** ppMesh_)
 {
 	if(this->instanceId == UninitializedPoolId) return false;
