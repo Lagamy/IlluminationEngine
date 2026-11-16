@@ -11,7 +11,8 @@
 namespace
 {
 constexpr char Magic[4] = {'S', 'F', 'H', 'B'};
-constexpr uint32_t Version = 2;
+/* 3 adds the uv and face texture sections; 2 was written by a build that left them out (the layout of 1 under that number), so both read like 1. */
+constexpr uint32_t Version = 3;
 
 template<typename T>
 void put(std::vector<uint8_t>& rBytes_, const T& rValue_)
@@ -235,6 +236,22 @@ std::vector<uint8_t> writeMeshDiffs(const std::vector<LevelMeshDiffs>& rLevels_)
 			{
 				for(uint32_t index : rFace) put(bytes, index);
 			}
+
+			/* Version 3: the Texturing subtab's edits (uv of imported vertices, face textures). */
+			put(bytes, static_cast<uint32_t>(rDiff.uvMoved.size()));
+			for(const auto& [index, rUv] : rDiff.uvMoved)
+			{
+				put(bytes, index);
+				putVector(bytes, rUv);
+			}
+			put(bytes, static_cast<uint32_t>(rDiff.faceTextures.size()));
+			for(const FaceTextureGroup& rGroup : rDiff.faceTextures)
+			{
+				put(bytes, static_cast<uint32_t>(rGroup.texture.size()));
+				bytes.insert(bytes.end(), rGroup.texture.begin(), rGroup.texture.end());
+				put(bytes, static_cast<uint32_t>(rGroup.faces.size()));
+				for(uint32_t face : rGroup.faces) put(bytes, face);
+			}
 		}
 	}
 	return bytes;
@@ -288,6 +305,23 @@ std::vector<LevelMeshDiffs> readMeshDiffs(const std::vector<uint8_t>& rBytes_)
 			for(std::array<uint32_t, 3>& rFace : rDiff.addedFaces)
 			{
 				for(uint32_t& rIndex : rFace) rIndex = reader.get<uint32_t>();
+			}
+			if(version < 3) continue;
+			rDiff.uvMoved.resize(count());
+			for(auto& rMove : rDiff.uvMoved)
+			{
+				rMove.first = reader.get<uint32_t>();
+				rMove.second = reader.vec2();
+			}
+			rDiff.faceTextures.resize(count());
+			for(FaceTextureGroup& rGroup : rDiff.faceTextures)
+			{
+				uint32_t length = count();
+				if(reader.offset + length > rBytes_.size()) throw std::runtime_error("HubWorld.bin: cut short.");
+				rGroup.texture.assign(reinterpret_cast<const char*>(rBytes_.data() + reader.offset), length);
+				reader.offset += length;
+				rGroup.faces.resize(count());
+				for(uint32_t& rFace : rGroup.faces) rFace = reader.get<uint32_t>();
 			}
 		}
 	}

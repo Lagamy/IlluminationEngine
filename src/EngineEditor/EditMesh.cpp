@@ -161,6 +161,41 @@ bool EditMesh::redo()
 	return true;
 }
 
+size_t EditMesh::dropUnusedAdded(const std::vector<uint32_t>& rVertices_)
+{
+	std::vector<char> used(this->vertices.size(), 0);
+	for(const Face& rFace : this->faces)
+	{
+		for(uint32_t corner : rFace.v) used[corner] = 1;
+	}
+	std::vector<char> drop(this->vertices.size(), 0);
+	size_t dropped = 0;
+	for(uint32_t vertex : rVertices_)
+	{
+		if(vertex >= this->original.vertices.size() && vertex < drop.size() && !used[vertex] && !drop[vertex])
+		{
+			drop[vertex] = 1;
+			dropped++;
+		}
+	}
+	if(dropped == 0) return 0;
+	std::vector<uint32_t> remap(this->vertices.size(), 0);
+	std::vector<Vertex> kept;
+	for(size_t vertex = 0; vertex < this->vertices.size(); vertex++)
+	{
+		if(drop[vertex]) continue;
+		remap[vertex] = static_cast<uint32_t>(kept.size());
+		kept.push_back(this->vertices[vertex]);
+	}
+	this->vertices = std::move(kept);
+	for(Face& rFace : this->faces)
+	{
+		for(uint32_t& rCorner : rFace.v) rCorner = remap[rCorner];
+	}
+	this->changed = true;
+	return dropped;
+}
+
 void EditMesh::deleteFacesUsing(const std::vector<uint32_t>& rVertices_)
 {
 	std::set<uint32_t> set(rVertices_.begin(), rVertices_.end());

@@ -263,7 +263,7 @@ void Gizmo::update(GLFWwindow* pWindow_, const Camera& rCamera_, const std::vect
 	}
 }
 
-bool Gizmo::updateLevels(GLFWwindow* pWindow_, const Camera& rCamera_, std::vector<glm::vec3>& rPositions_, std::vector<glm::vec3>& rRotationsDegrees_, bool uiWantsMouse_, bool cameraDragging_)
+bool Gizmo::updateLevels(GLFWwindow* pWindow_, const Camera& rCamera_, std::vector<glm::vec3>& rPositions_, std::vector<glm::vec3>& rRotationsDegrees_, const std::vector<glm::vec3>& rPivots_, bool uiWantsMouse_, bool cameraDragging_)
 {
 	/* Scale has no meaning for a level's place: the handles are the entity's Move and Rotate only. */
 	if(this->mode == Scale || rPositions_.empty())
@@ -274,22 +274,24 @@ bool Gizmo::updateLevels(GLFWwindow* pWindow_, const Camera& rCamera_, std::vect
 		return false;
 	}
 	std::vector<Target> members;
-	for(size_t i = 0; i < rPositions_.size(); i++) members.push_back(Target{rPositions_[i], rPositions_[i], levelRotation(rRotationsDegrees_[i]), glm::vec3(1.0f)});
+	/* The handles are at each level's pivot (the middle of its geometry, in the level's own space rPivots_) as it is placed: place + rotation * pivot. */
+	for(size_t i = 0; i < rPositions_.size(); i++)
+	{
+		glm::mat4 rotation = levelRotation(rRotationsDegrees_[i]);
+		glm::vec3 pivot = rPositions_[i] + glm::mat3(rotation) * rPivots_[i];
+		members.push_back(Target{pivot, pivot, rotation, glm::vec3(1.0f)});
+	}
 	std::vector<Target> before = members;
 	if(!this->driveGroup(pWindow_, rCamera_, members, uiWantsMouse_, cameraDragging_)) return false;
 	bool changed = false;
 	for(size_t i = 0; i < members.size(); i++)
 	{
-		if(members[i].position != before[i].position)
-		{
-			rPositions_[i] = members[i].position;
-			changed = true;
-		}
-		if(members[i].rotation != before[i].rotation)
-		{
-			rRotationsDegrees_[i] = levelRotationDegrees(members[i].rotation);
-			changed = true;
-		}
+		if(members[i].position == before[i].position && members[i].rotation == before[i].rotation) continue;
+
+		/* The place is the pivot's new position taken back by the new rotation, so a turn is about the pivot. */
+		rPositions_[i] = members[i].position - glm::mat3(members[i].rotation) * rPivots_[i];
+		if(members[i].rotation != before[i].rotation) rRotationsDegrees_[i] = levelRotationDegrees(members[i].rotation);
+		changed = true;
 	}
 	return changed;
 }

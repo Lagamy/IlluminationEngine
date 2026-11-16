@@ -58,10 +58,10 @@ struct Gizmo
 	void draw(const Camera& rCamera_, const std::vector<PoolId>& rGroup_);
 
 	/*
-	The same handles on the places of one or more levels in the HubWorld (the HubWorld view, Editor::hubWorldView): positions and rotations in degrees (HubWorldLevel), Move and Rotate only (Scale has no handles), the group acting as above (one level: about its own position). updateLevels changes the values
+	The same handles on the places of one or more levels in the HubWorld (the HubWorld view, Editor::hubWorldView): positions and rotations in degrees (HubWorldLevel), Move and Rotate only (Scale has no handles), the group acting as above (one level: about its pivot, rPivots_: a point of the level's own space, the middle of its geometry; the handles are at the pivot as placed and the place values are worked back from it). updateLevels changes the values
 	being dragged and returns true when it did; the caller applies them (Level::setHubWorldTransform) and keeps them (HubWorld::set).
 	*/
-	bool updateLevels(GLFWwindow* pWindow_, const Camera& rCamera_, std::vector<glm::vec3>& rPositions_, std::vector<glm::vec3>& rRotationsDegrees_, bool uiWantsMouse_, bool cameraDragging_);
+	bool updateLevels(GLFWwindow* pWindow_, const Camera& rCamera_, std::vector<glm::vec3>& rPositions_, std::vector<glm::vec3>& rRotationsDegrees_, const std::vector<glm::vec3>& rPivots_, bool uiWantsMouse_, bool cameraDragging_);
 	void drawLevels(const Camera& rCamera_, const std::vector<glm::vec3>& rPositions_);
 
 	/* What the handles work on: where they are drawn (origin), and the position, rotation and scale the drag changes. */

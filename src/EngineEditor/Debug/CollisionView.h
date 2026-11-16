@@ -30,7 +30,7 @@ struct CollisionView
 	int selectedAttribute = -1;
 
 	/* Lines of the level collisions and the entities' shapes farther than this from the camera (units) are not drawn; the camera's far plane limits it too. */
-	float drawDistance = 2000.0f;
+	float drawDistance = 10000.0f;
 
 	/* A cross to draw at a world position; value picks its color (see above), label (a string that outlives it, may be nullptr) names what it stands for in the legend. levelId is the level that made it (Level::destroy removes only its own). */
 	struct Marker

@@ -160,4 +160,7 @@ struct BasicMesh
 
 /* The one mesh the editor draws while its Geometry or Texturing subtab isolates the object being edited (GeometryPanel::isolate); nullptr = every mesh is drawn. Only compared with, never used. Renderer::run sets it each frame. */
 inline const BasicMesh* isolatedMesh = nullptr;
+
+/* Counts the editor's uploads of an edited level mesh (GeometryPanel::commit), so that what was worked out from the geometry (a level's gizmo pivot, Editor.cpp) is worked out again. */
+inline uint32_t meshRevision = 0;
 }

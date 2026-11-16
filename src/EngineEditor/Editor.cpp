@@ -16,6 +16,7 @@
 #include <format>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <map>
 #include <stdexcept>
 #include <fstream>
@@ -45,8 +46,9 @@ void Editor::loadSettings()
 	if(json.contains("geometry") && json["geometry"].is_object())
 	{
 		const Json& rGeometry = json["geometry"];
-		this->geometry.mergePixels = std::clamp(rGeometry.value("mergePixels", this->geometry.mergePixels), 2.0f, 60.0f);
-		this->geometry.xray = rGeometry.value("xray", this->geometry.xray);
+		Graphics::TriangleEditor::mergePixels = std::clamp(rGeometry.value("mergePixels", Graphics::TriangleEditor::mergePixels), 2.0f, 60.0f);
+		Graphics::TriangleEditor::xray = rGeometry.value("xray", Graphics::TriangleEditor::xray);
+		Graphics::TriangleEditor::followCursor = rGeometry.value("followCursor", Graphics::TriangleEditor::followCursor);
 	}
 	if(!json.contains("camera") || !json["camera"].is_object()) return;
 	const Json& rCamera = json["camera"];
@@ -70,7 +72,7 @@ void Editor::saveSettings()
 	json["inspectorWidth"] = this->inspector.width;
 	json["prefabPanelHeight"] = this->prefabPanel.height;
 	json["scriptEditor"] = std::string(this->prefabPanel.assets.scriptEditorCommand);
-	json["geometry"] = {{"mergePixels", this->geometry.mergePixels}, {"xray", this->geometry.xray}};
+	json["geometry"] = {{"mergePixels", Graphics::TriangleEditor::mergePixels}, {"xray", Graphics::TriangleEditor::xray}, {"followCursor", Graphics::TriangleEditor::followCursor}};
 	const EditorCamera& rCamera = this->camera;
 	json["camera"] = {
 		{"lookSensitivity", rCamera.lookSensitivity},
@@ -885,6 +887,46 @@ void Editor::selectHubWorldLevel(const std::string& name_, bool additive_)
 	this->hubWorldExtraSelected.assign(names.empty() ? names.end() : names.begin() + 1, names.end());
 }
 
+/*
+The middle of a level's geometry (the box around the vertices its triangles use, in the level's own space, its position included; the level's origin when it has none): where the HubWorld view's handles are. Kept per level until the geometry changes: the editor's uploads (meshRevision) or another set of meshes (a reload) make it again.
+*/
+static glm::vec3 levelPivot(Level& rLevel_)
+{
+	static std::map<uint32_t, std::pair<uint64_t, glm::vec3>> cache;
+	std::vector<std::pair<Graphics::BasicMesh*, glm::mat4>> meshes;
+	rLevel_.editableMeshes(meshes);
+	uint64_t signature = Graphics::meshRevision;
+	for(const auto& [pMesh, rWorld] : meshes) signature = signature * 1000003u + reinterpret_cast<uintptr_t>(pMesh) + pMesh->indicies.size();
+	signature = signature * 31u + rLevel_.selfId.generation;
+	auto found = cache.find(rLevel_.selfId.id);
+	if(found != cache.end() && found->second.first == signature) return found->second.second;
+	glm::vec3 low(std::numeric_limits<float>::max());
+	glm::vec3 high(std::numeric_limits<float>::lowest());
+	for(const auto& [pMesh, rWorld] : meshes)
+	{
+		for(uint32_t index : pMesh->indicies)
+		{
+			glm::vec3 point = glm::vec3(rWorld * glm::vec4(pMesh->verticies[index].position, 1.0f));
+			low = glm::min(low, point);
+			high = glm::max(high, point);
+		}
+	}
+	glm::vec3 pivot = low.x > high.x ? glm::vec3(0.0f) : rLevel_.position + (low + high) * 0.5f;
+	cache[rLevel_.selfId.id] = {signature, pivot};
+	return pivot;
+}
+
+bool Editor::levelPivotWorld(const std::string& name_, glm::vec3& rPivot_) const
+{
+	for(uint32_t i = 0; i < Globals::Game::levels.objects.size(); i++)
+	{
+		if(!Globals::Game::levels.alive[i] || Globals::Game::levels.objects[i].name != name_) continue;
+		rPivot_ = glm::vec3(Globals::Game::levels.objects[i].hubWorldMatrix() * glm::vec4(levelPivot(Globals::Game::levels.objects[i]), 1.0f));
+		return true;
+	}
+	return false;
+}
+
 void Editor::setLevelPlace(const HubWorldLevel& rPlace_)
 {
 	for(uint32_t i = 0; i < Globals::Game::levels.objects.size(); i++)
@@ -938,29 +980,28 @@ void Editor::addLevelToHubWorld(const std::string& name_)
 
 void Editor::removeLevelFromHubWorld(const std::string& name_)
 {
-	HubWorldLevel place;
-	if(this->levelPlace(name_, place))
+	/* The level is unloaded, the active one too (the HubWorld can be empty: no level, only its own entities). If it was active, the first level the HubWorld still lists that is loaded becomes the active one, or none. */
+	for(uint32_t i = 0; i < Globals::Game::levels.objects.size(); i++)
 	{
-		if(name_ == Globals::Game::hubWorld.active)
+		if(!Globals::Game::levels.alive[i] || Globals::Game::levels.objects[i].name != name_) continue;
+		PoolId id(i, Globals::Game::levels.generation[i]);
+		std::erase(Globals::Game::hubWorld.loaded, id);
+		Globals::Game::levels.remove(id);
+		break;
+	}
+	Globals::Game::spatialIndex.rebuild();
+	Globals::Game::hubWorld.remove(name_);
+	if(name_ == Globals::Game::hubWorld.active)
+	{
+		Globals::Game::hubWorld.active.clear();
+		for(const HubWorldLevel& rEntry : Globals::Game::hubWorld.levels)
 		{
-			place.position = glm::vec3(0.0f);
-			place.rotation = glm::vec3(0.0f);
-			this->setLevelPlace(place);
-		}
-		else
-		{
-			for(uint32_t i = 0; i < Globals::Game::levels.objects.size(); i++)
-			{
-				if(!Globals::Game::levels.alive[i] || Globals::Game::levels.objects[i].name != name_) continue;
-				PoolId id(i, Globals::Game::levels.generation[i]);
-				std::erase(Globals::Game::hubWorld.loaded, id);
-				Globals::Game::levels.remove(id);
-				break;
-			}
-			Globals::Game::spatialIndex.rebuild();
+			HubWorldLevel loadedPlace;
+			if(!this->levelPlace(rEntry.name, loadedPlace)) continue;
+			Globals::Game::hubWorld.active = rEntry.name;
+			break;
 		}
 	}
-	Globals::Game::hubWorld.remove(name_);
 	this->entityList.selectOnly(UninitializedPoolId);
 	this->hubWorldSelected.clear();
 	this->hubWorldExtraSelected.clear();
@@ -1417,7 +1458,8 @@ void Editor::processInputs()
 		bool ctrlDown = glfwGetKey(pWindow, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
 		bool shortcutKeyDown = glfwGetKey(pWindow, GLFW_KEY_Z) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_Y) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_C) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_V) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_S) == GLFW_PRESS;
 		/* In the Geometry and Texturing subtabs undo and save are Shift + Z and Shift + S (Ctrl switches the mesh editing's merging); Shift is the camera's fast fly and S flies back, so they fly nothing then. */
-		bool meshTabs = this->hubWorldGeometry || this->hubWorldTexturing;
+		bool meshTabs = this->hubWorldGeometry || this->hubWorldTexturing || this->hubWorldCollision;
+		Graphics::TriangleEditor& rMeshPanel = this->hubWorldCollision ? static_cast<Graphics::TriangleEditor&>(this->collisionPanel) : static_cast<Graphics::TriangleEditor&>(this->geometry);
 		bool shiftDown = glfwGetKey(pWindow, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
 		bool meshShortcut = meshTabs && shiftDown && (glfwGetKey(pWindow, GLFW_KEY_Z) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_S) == GLFW_PRESS || glfwGetKey(pWindow, GLFW_KEY_Y) == GLFW_PRESS);
 		if(keyboardFree && !(ctrlDown && shortcutKeyDown) && !meshShortcut) rCamera.processKeys(pWindow, Globals::App::deltaTime);
@@ -1444,8 +1486,8 @@ void Editor::processInputs()
 		/* Shift + Z undoes the open mesh's last edit (a move, a created vertex or face, a texture or UV edit, a delete), Shift + Y does it again, Shift + S saves, in the Geometry and Texturing subtabs. */
 		if(keyboardFree && meshTabs && shiftDown && !ctrlDown && !rCamera.dragging)
 		{
-			if(zDown && !this->zPressed) this->fileMessage = this->geometry.undo() ? "Undid a mesh edit." : "Nothing to undo in this mesh.";
-			if(yDown && !this->yPressed) this->fileMessage = this->geometry.redo() ? "Redid a mesh edit." : "Nothing to redo in this mesh.";
+			if(zDown && !this->zPressed) this->fileMessage = rMeshPanel.undo() ? "Undid a mesh edit." : "Nothing to undo in this mesh.";
+			if(yDown && !this->yPressed) this->fileMessage = rMeshPanel.redo() ? "Redid a mesh edit." : "Nothing to redo in this mesh.";
 			if(sDown && !this->sPressed) this->saveAllLevels();
 		}
 		/* Delete removes the selected entities (deleteSelected), once per press, with the keyboard free. */
@@ -1461,13 +1503,13 @@ void Editor::processInputs()
 		The gizmo takes a left press on one of its handles and keeps the mouse until the handle is released. 1 / 2 / 3 pick Move / Rotate / Scale (W is a fly key, so W E R is not used); not during a drag or a camera hold, nor while a text field has the keyboard.
 		*/
 		this->geometry.texturing = this->hubWorldTexturing;
-		this->geometry.island = this->hubWorldTexturing && this->texturing.editMode;
 		if(this->hubWorldTexturing) this->geometry.mode = Graphics::GeometryPanel::Face;
 		/* Move is the only gizmo these subtabs use, and keys 1-3 no longer change it there, so it is set here (a Rotate or Scale left over from elsewhere would do nothing). */
 		if(this->hubWorldGeometry || this->hubWorldTexturing || this->hubWorldCollision) this->gizmo.mode = Graphics::Gizmo::Move;
 		if(this->hubWorldGeometry || this->hubWorldTexturing) this->geometry.update(pWindow, rCamera, this->gizmo, this->debugUI.wantsMouse(), rCamera.dragging);
 		else this->geometry.releaseIsolation();
 		if(this->hubWorldCollision) this->collisionPanel.update(pWindow, rCamera, this->gizmo, this->debugUI.wantsMouse(), rCamera.dragging);
+		else this->collisionPanel.releaseIsolation();
 		PoolId replacedId;
 		PoolId replacingPrefabId;
 		if(this->geometry.takeReplacement(replacedId, replacingPrefabId)) this->replaceWithPrefab(replacedId, replacingPrefabId);
@@ -1476,15 +1518,26 @@ void Editor::processInputs()
 			std::vector<HubWorldLevel> places;
 			std::vector<glm::vec3> positions;
 			std::vector<glm::vec3> rotations;
+			std::vector<glm::vec3> pivots;
 			for(const std::string& rName : this->hubWorldSelection())
 			{
 				HubWorldLevel place;
 				if(!this->levelPlace(rName, place)) continue;
+
+				/* The level's pivot: the middle of its geometry, in its own space. */
+				glm::vec3 pivot(0.0f);
+				for(uint32_t i = 0; i < Globals::Game::levels.objects.size(); i++)
+				{
+					if(!Globals::Game::levels.alive[i] || Globals::Game::levels.objects[i].name != rName) continue;
+					pivot = levelPivot(Globals::Game::levels.objects[i]);
+					break;
+				}
+				pivots.push_back(pivot);
 				places.push_back(place);
 				positions.push_back(place.position);
 				rotations.push_back(place.rotation);
 			}
-			if(this->gizmo.updateLevels(pWindow, rCamera, positions, rotations, this->debugUI.wantsMouse(), rCamera.dragging))
+			if(this->gizmo.updateLevels(pWindow, rCamera, positions, rotations, pivots, this->debugUI.wantsMouse(), rCamera.dragging))
 			{
 				for(size_t i = 0; i < places.size(); i++)
 				{
@@ -1509,7 +1562,7 @@ void Editor::processInputs()
 			{
 				const glm::vec3 directions[6] = {{0.0f, 0.0f, -1.0f}, {0.0f, 0.0f, 1.0f}, {-1.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}};
 				glm::vec3 target;
-				bool hasTarget = !this->hubWorldCollision && this->geometry.handle(target);
+				bool hasTarget = rMeshPanel.handle(target);
 				rCamera.alignTo(directions[i], hasTarget ? &target : nullptr);
 			}
 			else if(pressed && i < 3) this->gizmo.mode = static_cast<Graphics::Gizmo::Mode>(i);
@@ -1569,8 +1622,30 @@ void Editor::processInputs()
 		if(!rCamera.dragging)
 		{
 			glm::vec3 orbitCenter;
-			rCamera.middleOrbits = (this->hubWorldGeometry || this->hubWorldTexturing) && glfwGetMouseButton(pWindow, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS && this->geometry.center(orbitCenter);
-			if(rCamera.middleOrbits) rCamera.orbitCenter = orbitCenter;
+			bool middleDown = meshTabs && glfwGetMouseButton(pWindow, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
+			bool hasCenter = middleDown && rMeshPanel.center(orbitCenter);
+
+			/* With no mesh open yet (one opens on the first pick) the camera turns about what the middle of the view looks at: the first level geometry on that ray, else a point 20 units ahead. */
+			if(middleDown && !hasCenter)
+			{
+				float nearest = rCamera.farPlane;
+				bool hit = false;
+				for(uint32_t i = 0; i < Globals::Game::levels.objects.size(); i++)
+				{
+					if(!Globals::Game::levels.alive[i]) continue;
+					float distance = 0.0f;
+					const Graphics::BasicMesh* pMesh = nullptr;
+					if(Globals::Game::levels.objects[i].rayHitsInstance(rCamera.position, rCamera.front, distance, &pMesh) && distance < nearest)
+					{
+						nearest = distance;
+						hit = true;
+					}
+				}
+				orbitCenter = rCamera.position + rCamera.front * (hit ? nearest : 20.0f);
+				hasCenter = true;
+			}
+			rCamera.middleOrbits = hasCenter;
+			if(hasCenter) rCamera.orbitCenter = orbitCenter;
 		}
 		if(rCamera.updateDrag(pWindow, this->debugUI.wantsMouse() || this->gizmo.wantsMouse())) this->cursorFree = !rCamera.dragging;
 	}
@@ -1624,7 +1699,7 @@ void Editor::processInputs()
 	P prints where the view ray (from the camera shown on the screen, through the crosshair at the center of the window) first hits a model: the nearest triangle of any live entity (Entity::rayHitsModel) or level (Level::rayHitsInstance), the drawn triangles, not the collision, as a world position, with the entity's or level's name and, for a level, the hit mesh's texture (Level::meshTexture). A debug aid to find a spot in a level (a texture problem, say).
 	*/
 	bool probeDown = glfwGetKey(pWindow, GLFW_KEY_P) == GLFW_PRESS;
-	if(probeDown && !this->probePressed && !this->debugUI.wantsKeyboard())
+	if(probeDown && !this->probePressed && !this->debugUI.wantsKeyboard() && !(this->active && (this->hubWorldGeometry || this->hubWorldCollision)))
 	{
 		const Camera& rViewCamera = this->active ? static_cast<const Camera&>(this->camera) : getMainCamera();
 		float nearest = rViewCamera.farPlane;

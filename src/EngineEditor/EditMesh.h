@@ -56,6 +56,10 @@ struct EditMesh
 	/* How many undo steps there are, and going back to the state before step depth_ at once (a discard: the steps after it are dropped, with no redo); false if there are not that many. */
 	size_t undoCount() const { return this->undoStack.size(); }
 	bool discardTo(size_t depth_);
+	/* Removes the given vertices the editor added (number from original.vertices.size() on) that no face uses; the vertices after them get new numbers (faces follow). The imported vertices stay: they are only gone with their faces. Returns how many went. */
+	size_t dropUnusedAdded(const std::vector<uint32_t>& rVertices_);
+	/* Drops the undo steps after step depth_ (that one stays). */
+	void collapseUndo(size_t depth_) { if(this->undoStack.size() > depth_ + 1) this->undoStack.resize(depth_ + 1); this->redoStack.clear(); }
 
 	/* Removes the faces that use any of the vertices (deleteFaces: the faces of the numbers). */
 	void deleteFacesUsing(const std::vector<uint32_t>& rVertices_);

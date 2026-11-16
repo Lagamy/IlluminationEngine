@@ -39,9 +39,16 @@ struct CollisionEdit
 	/* Every vertex at the position of vertex_ (itself included). */
 	std::vector<uint32_t> weld(uint32_t vertex_) const;
 
-	/* Undo steps: pushUndo before a change (a drag counts as one), undo goes back one. */
+	/* Undo steps: pushUndo before a change (a drag counts as one; it also drops the redo steps), undo goes back one, redo forward again over an undo, discardTo goes back to the state before step depth_ at once (the steps after it are dropped, no redo). */
 	void pushUndo();
 	bool undo();
+	bool redo();
+	size_t undoCount() const { return this->undoStack.size(); }
+	bool discardTo(size_t depth_);
+	/* As EditMesh::dropUnusedAdded. */
+	size_t dropUnusedAdded(const std::vector<uint32_t>& rVertices_);
+	/* Drops the undo steps after step depth_ (that one stays). */
+	void collapseUndo(size_t depth_) { if(this->undoStack.size() > depth_ + 1) this->undoStack.resize(depth_ + 1); this->redoStack.clear(); }
 
 	/* Removes the triangles that use any of the vertices (deleteTriangles: the triangles of the numbers). */
 	void deleteTrianglesUsing(const std::vector<uint32_t>& rVertices_);
@@ -65,6 +72,7 @@ private:
 		std::vector<Triangle> triangles;
 	};
 	std::vector<State> undoStack;
+	std::vector<State> redoStack;
 };
 
 /* Moller-Trumbore against one triangle, both sides; t_ in the units of the direction. */

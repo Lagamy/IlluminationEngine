@@ -314,8 +314,9 @@ void DebugUI::draw(Editor& rEditor_)
 			std::vector<glm::vec3> positions;
 			for(const std::string& rName : rEditor_.hubWorldSelection())
 			{
-				HubWorldLevel place;
-				if(rEditor_.levelPlace(rName, place)) positions.push_back(place.position);
+				/* The handles are at each level's pivot as placed, where the drag works (Editor::processInputs). */
+				glm::vec3 pivot;
+				if(rEditor_.levelPivotWorld(rName, pivot)) positions.push_back(pivot);
 			}
 			rEditor_.gizmo.drawLevels(rEditor_.camera, positions);
 		}

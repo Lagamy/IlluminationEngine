@@ -123,6 +123,12 @@ void EntityListPanel::draw()
 					editor.collisionView.drawPanel();
 					ImGui::EndTabItem();
 				}
+				if(ImGui::BeginTabItem("Mesh editing"))
+				{
+					ImGui::Checkbox("Extrusion follows the cursor", &Graphics::TriangleEditor::followCursor);
+					ImGui::TextWrapped("On: after E on an edge (Geometry and Collision subtabs) the new vertices move with the cursor until a left click places them; Enter makes the faces, right click or Esc cancels. Off: they are placed beside the edge and moved with the gizmo.");
+					ImGui::EndTabItem();
+				}
 				if(ImGui::BeginTabItem("Editor camera"))
 				{
 					this->drawCameraSettings();

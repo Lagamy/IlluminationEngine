@@ -178,6 +178,7 @@ if(EDITOR)
 		src/EngineEditor/Panels/GeometryPanel.cpp
 		src/EngineEditor/Panels/TexturingPanel.cpp
 		src/EngineEditor/Panels/CollisionPanel.cpp
+		src/EngineEditor/Panels/TriangleEditor.cpp
 		src/EngineEditor/EditMesh.cpp
 		src/EngineEditor/CollisionEdit.cpp
 		${IMGUI_DIR}/imgui.cpp

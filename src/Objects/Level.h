@@ -165,6 +165,8 @@ struct Level
 	void drawInstance(const glm::mat4& rBase_, const Camera& rCamera_);
 	/* The meshes of the instance's pieces with their placement in the level's space (the yaw of a Shadow level included), for rayHitsInstance. */
 	void instanceMeshes(std::vector<std::pair<const Graphics::BasicMesh*, glm::mat4>>& rMeshes_) const;
+	/* The GL texture a mesh of instanceMeshes is drawn with (the editor's Texturing window shows it); 0 if it has none or the level is a glTF one. */
+	unsigned int instanceMeshTexture(const Graphics::BasicMesh* pMesh_) const;
 	void destroyInstance();
 	/*
 	The level's drawn meshes with their placement in the level's space (the HubWorld place and position excluded; a glTF level's submeshes, else instanceMeshes), each mesh once, in the order the importer makes them: the ordinal of a mesh in this list is what a MeshDiff names it by (HubWorld.bin). The level owns the meshes; the editor's Geometry subtab and the loader change them.

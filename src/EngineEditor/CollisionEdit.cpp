@@ -101,17 +101,76 @@ std::vector<uint32_t> CollisionEdit::weld(uint32_t vertex_) const
 void CollisionEdit::pushUndo()
 {
 	this->undoStack.push_back({this->vertices, this->triangles});
+	this->redoStack.clear();
 	if(this->undoStack.size() > MaxUndoSteps) this->undoStack.erase(this->undoStack.begin());
 }
 
 bool CollisionEdit::undo()
 {
 	if(this->undoStack.empty()) return false;
+	this->redoStack.push_back({this->vertices, this->triangles});
 	this->vertices = std::move(this->undoStack.back().vertices);
 	this->triangles = std::move(this->undoStack.back().triangles);
 	this->undoStack.pop_back();
 	this->changed = true;
 	return true;
+}
+
+bool CollisionEdit::redo()
+{
+	if(this->redoStack.empty()) return false;
+	this->undoStack.push_back({this->vertices, this->triangles});
+	this->vertices = std::move(this->redoStack.back().vertices);
+	this->triangles = std::move(this->redoStack.back().triangles);
+	this->redoStack.pop_back();
+	this->changed = true;
+	return true;
+}
+
+bool CollisionEdit::discardTo(size_t depth_)
+{
+	if(depth_ >= this->undoStack.size()) return false;
+	this->vertices = std::move(this->undoStack[depth_].vertices);
+	this->triangles = std::move(this->undoStack[depth_].triangles);
+	this->undoStack.resize(depth_);
+	this->redoStack.clear();
+	this->changed = true;
+	return true;
+}
+
+size_t CollisionEdit::dropUnusedAdded(const std::vector<uint32_t>& rVertices_)
+{
+	std::vector<char> used(this->vertices.size(), 0);
+	for(const Triangle& rTriangle : this->triangles)
+	{
+		for(uint32_t corner : rTriangle.v) used[corner] = 1;
+	}
+	std::vector<char> drop(this->vertices.size(), 0);
+	size_t dropped = 0;
+	for(uint32_t vertex : rVertices_)
+	{
+		if(vertex >= this->original.vertices.size() && vertex < drop.size() && !used[vertex] && !drop[vertex])
+		{
+			drop[vertex] = 1;
+			dropped++;
+		}
+	}
+	if(dropped == 0) return 0;
+	std::vector<uint32_t> remap(this->vertices.size(), 0);
+	std::vector<glm::vec3> kept;
+	for(size_t vertex = 0; vertex < this->vertices.size(); vertex++)
+	{
+		if(drop[vertex]) continue;
+		remap[vertex] = static_cast<uint32_t>(kept.size());
+		kept.push_back(this->vertices[vertex]);
+	}
+	this->vertices = std::move(kept);
+	for(Triangle& rTriangle : this->triangles)
+	{
+		for(uint32_t& rCorner : rTriangle.v) rCorner = remap[rCorner];
+	}
+	this->changed = true;
+	return dropped;
 }
 
 void CollisionEdit::deleteTrianglesUsing(const std::vector<uint32_t>& rVertices_)

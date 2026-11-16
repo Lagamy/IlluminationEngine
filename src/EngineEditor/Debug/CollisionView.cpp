@@ -326,6 +326,8 @@ void CollisionView::draw(const Camera& rCamera_)
 	bool levelLines = this->enabled || editor.hubWorldCollision;
 	if(!editor.active || (!levelLines && !this->boundAreaTabActive && this->markers.empty() && !editor.hubWorldView)) return;
 
+	/* The Collision subtab's Isolate object: only the open level's collision lines (and no entity shapes) are drawn. */
+	PoolId isolated = editor.hubWorldCollision ? editor.collisionPanel.isolatedCollision() : UninitializedPoolId;
 	std::vector<PoolId> levelCollisions;
 	if(levelLines)
 	{
@@ -333,7 +335,7 @@ void CollisionView::draw(const Camera& rCamera_)
 		{
 			if(!Globals::Game::levels.alive[i] || !levelShown(Globals::Game::levels.objects[i].selfId)) continue;
 			PoolId id = Globals::Game::levels.objects[i].collisionId;
-			if(id != UninitializedPoolId) levelCollisions.push_back(id);
+			if(id != UninitializedPoolId && (isolated == UninitializedPoolId || id == isolated)) levelCollisions.push_back(id);
 		}
 		if(levelCollisions != this->shownLevelCollisions || this->colorByAttribute != this->shownByAttribute || this->selectedAttribute != this->shownSelected) this->rebuildLevelLines(levelCollisions);
 	}
@@ -347,7 +349,7 @@ void CollisionView::draw(const Camera& rCamera_)
 	float distance = std::min(this->drawDistance, rCamera_.farPlane);
 	std::array<glm::vec4, 6> entityPlanes = rCamera_.frustumPlanes();
 	std::map<uint32_t, std::pair<uint32_t, PoolId>> shapeValues;
-	bool drawEntities = this->enabled || this->boundAreaTabActive;
+	bool drawEntities = (this->enabled || this->boundAreaTabActive) && isolated == UninitializedPoolId;
 	std::vector<PoolId> selectedEntities = editor.entityList.selection();
 	for(uint32_t i = 0; drawEntities && i < Globals::Game::entities.objects.size(); i++)
 	{
@@ -523,7 +525,7 @@ void CollisionView::drawPanel()
 {
 	ImGui::Checkbox("Show collision lines (C)", &this->enabled);
 	ImGui::Checkbox("Color by attribute, otherwise by slope (V)", &this->colorByAttribute);
-	ImGui::SliderFloat("Draw distance", &this->drawDistance, 100.0f, 20000.0f, "%.0f", ImGuiSliderFlags_Logarithmic);
+	ImGui::SliderFloat("Draw distance", &this->drawDistance, 100.0f, 50000.0f, "%.0f", ImGuiSliderFlags_Logarithmic);
 	if(ImGui::BeginTabBar("CollisionTabs"))
 	{
 		if(ImGui::BeginTabItem("Level"))

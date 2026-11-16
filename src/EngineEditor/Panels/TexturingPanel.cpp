@@ -4,6 +4,8 @@
 #include "Editor.h"
 #include "ExternalAssets.h"
 #include "GPU_Globals.h"
+#include "Globals.h"
+#include "Level.h"
 #include "MeshDiff.h"
 #include "imgui.h"
 #include <algorithm>
@@ -61,13 +63,13 @@ void TexturingPanel::assign(GeometryPanel& rGeometry_, const std::string& rTextu
 	pEdit->setTexture(rGeometry_.selectedFaces(), rTexture_);
 	pEdit->upload(*pMesh);
 	this->slotTexture = rTexture_;
-	this->message.clear();
+	this->message = std::format("Gave {} face(s) {}.", rGeometry_.selectedFaces().size(), rTexture_.empty() ? std::string("their own texture") : rTexture_);
 }
 
 void TexturingPanel::drawTab(GeometryPanel& rGeometry_)
 {
 	rGeometry_.drawSources();
-	ImGui::TextWrapped("Left click level faces in the viewport to pick them (Shift toggles), left drag a box to pick the faces in it, right click or right drag a box to take them out (Alt + right drag looks around). Shift + Z undoes a texture or UV edit, Shift + Y does it again, Shift + S saves. In Set mode drag a texture from the Assets tab onto the texture window, or use Texture..., to give the picked faces that texture. In Edit mode a click picks the faces joined to it with its texture. Drag the box in the window to move the picked UVs, a corner to scale. Done ends the selection.");
+	ImGui::TextWrapped("Left click level faces in the viewport to pick them (Shift toggles), left drag a box to pick the faces in it, right click or right drag a box to take them out (Alt + right drag looks around). Shift + Z undoes a texture or UV edit, Shift + Y does it again, Shift + S saves. The window shows the texture the picked faces have now: drag the box in it to move the picked UVs, a corner to scale; drag a texture from the Assets tab onto the window, or use Texture..., to replace it on the picked faces. Done ends the selection.");
 	EditMesh* pEdit = rGeometry_.current();
 	if(pEdit == nullptr)
 	{
@@ -126,18 +128,9 @@ void TexturingPanel::drawPanel(GeometryPanel& rGeometry_)
 	ImGui::SetNextWindowSize(ImVec2(width, height));
 	ImGui::Begin("Texture", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
 
-	/* The modes at the left, Done at the right; a mode change drops the selection (Set and Edit pick differently). */
-	int mode = this->editMode ? 1 : 0;
-	ImGui::RadioButton("Set", &mode, 0);
-	ImGui::SameLine();
-	ImGui::RadioButton("Edit", &mode, 1);
-	if((mode == 1) != this->editMode)
-	{
-		this->editMode = mode == 1;
-		rGeometry_.clearSelection();
-		this->drag = 0;
-	}
-	ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize("Done").x - ImGui::GetStyle().FramePadding.x * 2.0f - ImGui::GetStyle().WindowPadding.x);
+	/* The last message (a texture that could not be given: no faces picked, no such texture) at the left, Isolate and Done at the right. */
+	ImGui::TextUnformatted(this->message.empty() ? "Drop a texture here to replace the picked faces' texture." : this->message.c_str());
+	ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize("Isolate object (I)").x - ImGui::CalcTextSize("Done").x - ImGui::GetStyle().FramePadding.x * 4.0f - ImGui::GetStyle().ItemSpacing.x - ImGui::GetStyle().WindowPadding.x);
 	if(ImGui::Button(rGeometry_.isolate ? "Show all (I)" : "Isolate object (I)")) rGeometry_.toggleIsolate();
 	ImGui::SameLine();
 	if(ImGui::Button("Done"))
@@ -172,6 +165,14 @@ void TexturingPanel::drawPanel(GeometryPanel& rGeometry_)
 		{
 			if(Texture* pTexture = findFaceTexture(pEdit->ownTexture)) textureId = pTexture->textureId;
 		}
+		else if(first < pEdit->faces.size() && !pEdit->level.empty())
+		{
+			/* A level's face with no texture of its own is drawn with its piece's: the level says which. */
+			for(uint32_t i = 0; i < Globals::Game::levels.objects.size(); i++)
+			{
+				if(Globals::Game::levels.alive[i] && Globals::Game::levels.objects[i].name == pEdit->level) textureId = Globals::Game::levels.objects[i].instanceMeshTexture(pMesh);
+			}
+		}
 	}
 	static const std::vector<uint32_t> NoFaces;
 	const std::vector<uint32_t>& rFaces = hasFaces ? rGeometry_.selectedFaces() : NoFaces;
@@ -188,7 +189,7 @@ void TexturingPanel::drawPanel(GeometryPanel& rGeometry_)
 	ImVec2 avail = ImGui::GetContentRegionAvail();
 	ImVec2 origin = ImGui::GetCursorScreenPos();
 	ImGui::InvisibleButton("TextureCanvas", ImVec2(std::max(avail.x, 1.0f), std::max(avail.y, 1.0f)));
-	if(!this->editMode && ImGui::BeginDragDropTarget())
+	if(ImGui::BeginDragDropTarget())
 	{
 		if(const ImGuiPayload* pPayload = ImGui::AcceptDragDropPayload("TEXTURE"))
 		{
@@ -280,7 +281,9 @@ void TexturingPanel::drawPanel(GeometryPanel& rGeometry_)
 		{
 			if(glm::distance(mouse, glm::vec2(rCorner.x, rCorner.y)) <= HandleRadius + HandleTolerance) hit = 2;
 		}
-		if(hit == 0 && mouseScreen.x >= corners[0].x && mouseScreen.x <= corners[2].x && mouseScreen.y >= corners[0].y && mouseScreen.y <= corners[2].y) hit = 1;
+		/* The inside of the box, with the handle radius around it: UVs that are a line (all U or all V equal, common in levels) have a box with no width, which could only be scaled along the line. */
+		float pad = HandleRadius + HandleTolerance;
+		if(hit == 0 && mouseScreen.x >= corners[0].x - pad && mouseScreen.x <= corners[2].x + pad && mouseScreen.y >= corners[0].y - pad && mouseScreen.y <= corners[2].y + pad) hit = 1;
 		if(hit != 0)
 		{
 			pEdit->pushUndo();

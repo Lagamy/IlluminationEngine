@@ -70,6 +70,8 @@ struct Editor
 	std::vector<std::string> hubWorldSelection() const;
 	bool hubWorldIsSelected(const std::string& name_) const;
 	void selectHubWorldLevel(const std::string& name_, bool additive_);
+	/* A loaded level's pivot (the middle of its geometry) as placed in the HubWorld, where the level handles are drawn and work; false when the level is not loaded. */
+	bool levelPivotWorld(const std::string& name_, glm::vec3& rPivot_) const;
 	bool levelPlace(const std::string& name_, HubWorldLevel& rPlace_) const;
 	void setLevelPlace(const HubWorldLevel& rPlace_);
 
